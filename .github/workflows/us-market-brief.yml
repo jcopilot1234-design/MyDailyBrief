@@ -1,0 +1,74 @@
+name: US Market Brief (8AM HKT)
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # UTC 00:00 = 香港時間 08:00
+  workflow_dispatch:
+
+jobs:
+  send-us-brief:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch US market data
+        id: fetch
+        run: |
+          SYMBOLS="^DJI,^GSPC,^IXIC,AAPL,MSFT,NVDA,GOOGL,TSLA,META,GC=F,CL=F,HG=F,^VIX,^TNX,DXY,BTC-USD,ETH-USD"
+          
+          DATA=""
+          IFS=',' read -ra SYM_ARRAY <<< "$SYMBOLS"
+          for SYM in "${SYM_ARRAY[@]}"; do
+            RESULT=$(curl -s "https://query1.finance.yahoo.com/v8/finance/chart/${SYM}?interval=1d&range=2d" \
+              -H "User-Agent: Mozilla/5.0")
+            
+            PRICE=$(echo "$RESULT" | jq -r '.chart.result[0].meta.regularMarketPrice // "N/A"')
+            PREV=$(echo "$RESULT" | jq -r '.chart.result[0].meta.chartPreviousClose // "N/A"')
+            NAME=$(echo "$RESULT" | jq -r '.chart.result[0].meta.symbol // "N/A"')
+            
+            if [ "$PRICE" != "N/A" ] && [ "$PREV" != "N/A" ]; then
+              CHANGE=$(echo "scale=2; (($PRICE - $PREV) / $PREV) * 100" | bc)
+              DATA="${DATA}${NAME}: ${PRICE} (${CHANGE}%)\n"
+            fi
+          done
+          
+          echo "data<<EOF" >> $GITHUB_OUTPUT
+          echo -e "$DATA" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Fetch financial news
+        id: news
+        run: |
+          # 抓 Yahoo Finance 財經新聞
+          NEWS=$(curl -s "https://query1.finance.yahoo.com/v1/finance/search?q=stock%20market&newsCount=8" \
+            -H "User-Agent: Mozilla/5.0" \
+            | jq -r '.news[] | "• " + .title' | head -8)
+          
+          echo "news<<EOF" >> $GITHUB_OUTPUT
+          echo "$NEWS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate AI summary
+        id: ai
+        run: |
+          PROMPT="以下係美股昨晚收市數據（香港時間今早）：\n\n${{ steps.fetch.outputs.data }}\n\n最新財經新聞標題：\n${{ steps.news.outputs.news }}\n\n請用繁體中文寫一段 200 字左右嘅摘要，講下：1) 美股三大指數表現 2) 主要科技股走勢 3) 商品市場（黃金、原油、銅）4) 市場情緒（VIX、美債、美元）5) 加密貨幣 6) 結合新聞標題，講下發生咩事。用財經新聞報導嘅語氣，簡潔專業。"
+          
+          RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
+            -H "Authorization: Bearer ${{ secrets.DEEPSEEK_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "{
+              \"model\": \"deepseek-chat\",
+              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
+              \"temperature\": 0.7
+            }")
+          
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send to Telegram
+        run: |
+          MESSAGE="📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A${{ steps.ai.outputs.summary }}%0A%0A📰 財經新聞：%0A${{ steps.news.outputs.news }}"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=$MESSAGE"
