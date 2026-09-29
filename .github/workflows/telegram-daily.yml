@@ -1,24 +1,5 @@
-name: Telegram Daily Brief
+📰 今日財經快報已準備好！
 
-on:
-  schedule:
-    - cron: '0 1 * * *'  # 每日 UTC 01:00（香港時間早上 9 點）
-  workflow_dispatch:
+日期：$(date +%Y-%m-%d)
 
-jobs:
-  send-to-telegram:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Fetch today's report
-        run: |
-          TODAY=$(date +%Y-%m-%d)
-          curl -s "https://jcopilot1234-design.github.io/MyDailyBrief/" -o report.html
-          echo "Report fetched: $(wc -c < report.html) bytes"
-
-      - name: Send to Telegram
-        run: |
-          TITLE=$(grep -oP '(?<=<h1>)[^<]+' report.html | head -1)
-          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=📰 今日財經快報已準備好！%0A%0A日期：$(date +%Y-%m-%d)%0A%0A請撳 👍 Reaction 批准發佈到 Instagram。" \
-            -d "parse_mode=HTML"
+如要發佈到 Instagram，請回覆「OK」。
