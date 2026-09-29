@@ -1,0 +1,75 @@
+name: Instagram Publish
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # 每 15 分鐘檢查一次
+  workflow_dispatch:
+
+jobs:
+  check-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Telegram for approval
+        id: check
+        run: |
+          # 攞最新嘅 Telegram 訊息
+          RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
+          
+          # 檢查有冇 "OK" 或 "ok" 回覆
+          if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
+            echo "approved=true" >> $GITHUB_OUTPUT
+            echo "✅ 收到批准回覆"
+          else
+            echo "approved=false" >> $GITHUB_OUTPUT
+            echo "⏳ 未收到批准回覆"
+          fi
+
+      - name: Generate Instagram image
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          # 下載今日報告
+          curl -s "https://jcopilot1234-design.github.io/MyDailyBrief/" -o report.html
+          
+          # 用 HTML/CSS to Image 生成圖片（需要 HCTI 憑證）
+          curl -X POST "https://hcti.io/v1/image" \
+            -u "${{ secrets.HCTI_USER_ID }}:${{ secrets.HCTI_API_KEY }}" \
+            -d "html=$(cat report.html)" \
+            -d "css=body{font-family:sans-serif;padding:40px;max-width:1080px;margin:0 auto}h1{color:#1a1a1a}" \
+            -o ig-card.png
+
+      - name: Upload to Imgur
+        if: steps.check.outputs.approved == 'true'
+        id: imgur
+        run: |
+          RESPONSE=$(curl -s -X POST "https://api.imgur.com/3/image" \
+            -H "Authorization: Client-ID ${{ secrets.IMGUR_CLIENT_ID }}" \
+            -F "image=@ig-card.png")
+          echo "url=$(echo $RESPONSE | jq -r '.data.link')" >> $GITHUB_OUTPUT
+
+      - name: Publish to Instagram
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          # 建立媒體容器
+          CONTAINER=$(curl -s -X POST \
+            "https://graph.facebook.com/v22.0/${{ secrets.IG_BUSINESS_ACCOUNT_ID }}/media" \
+            -d "image_url=${{ steps.imgur.outputs.url }}" \
+            -d "caption=今日財經快報 $(date +%Y-%m-%d)" \
+            -d "access_token=${{ secrets.IG_PAGE_ACCESS_TOKEN }}" \
+            | jq -r '.id')
+          
+          sleep 10
+          
+          # 正式發佈
+          curl -X POST \
+            "https://graph.facebook.com/v22.0/${{ secrets.IG_BUSINESS_ACCOUNT_ID }}/media_publish" \
+            -d "creation_id=$CONTAINER" \
+            -d "access_token=${{ secrets.IG_PAGE_ACCESS_TOKEN }}"
+          
+          echo "✅ 已發佈到 Instagram"
+
+      - name: Send confirmation to Telegram
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d "text=✅ 已成功發佈到 Instagram！"
