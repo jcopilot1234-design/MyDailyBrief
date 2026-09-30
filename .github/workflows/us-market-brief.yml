@@ -51,12 +51,12 @@ jobs:
               LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
               SOURCE_NAME=$(echo "$ITEM" | grep -oP '(?<=<source url="[^"]*">)[^<]+' | head -1)
               [ -z "$SOURCE_NAME" ] && SOURCE_NAME=$(echo "$SRC" | cut -d'.' -f1 | tr '[:lower:]' '[:upper:]')
-              [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}\n  <a href=\"${LINK}\">${SOURCE_NAME}</a>\n"
+              [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}"$'\n'"<a href=\"${LINK}\">${SOURCE_NAME}</a>"$'\n'
             done <<< "$ITEMS"
           done
           
           echo "news<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$NEWS" >> $GITHUB_OUTPUT
+          echo "$NEWS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Fetch AI news with URLs
@@ -72,11 +72,11 @@ jobs:
             LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
             SOURCE_NAME=$(echo "$ITEM" | grep -oP '(?<=<source url="[^"]*">)[^<]+' | head -1)
             [ -z "$SOURCE_NAME" ] && SOURCE_NAME="News"
-            [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}\n  <a href=\"${LINK}\">${SOURCE_NAME}</a>\n"
+            [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}"$'\n'"<a href=\"${LINK}\">${SOURCE_NAME}</a>"$'\n'
           done <<< "$ITEMS"
           
           echo "ainews<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$AINEWS" >> $GITHUB_OUTPUT
+          echo "$AINEWS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate AI summary (Part 1 - News)
@@ -90,7 +90,7 @@ jobs:
           今日財經新聞（附 HTML 連結）：
           ${{ steps.news.outputs.news }}
 
-          請用繁體中文列出 8 則今日最具影響力嘅財經新聞、政策改變、重要數據。每則格式（保留原有 HTML 連結）：
+          請用繁體中文列出 8 則今日最具影響力嘅財經新聞、政策改變、重要數據。每則格式（必須保留原有 HTML 連結）：
           • 標題
           <a href="URL">來源</a>
 
@@ -119,7 +119,7 @@ jobs:
           AI 相關新聞（附 HTML 連結）：
           ${{ steps.ainews.outputs.ainews }}
 
-          請用繁體中文列出 8 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則格式（保留原有 HTML 連結）：
+          請用繁體中文列出 8 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則格式（必須保留原有 HTML 連結）：
           • 標題
           <a href="URL">來源</a>
 
@@ -151,10 +151,10 @@ jobs:
 
           請用繁體中文生成：
 
-          ## 今日市場評論
+          今日市場評論：
           用一段 100-150 字嘅評論，總結當天整體表現。
 
-          ## 穩建長期投資建議
+          穩建長期投資建議：
           提供 2-3 點穩建長期投資建議。
 
           唔好用 Markdown 格式，只用純文字。
@@ -177,24 +177,44 @@ jobs:
 
       - name: Send Part 1 to Telegram
         run: |
+          DATE=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
+          cat > /tmp/msg1.txt << MSG_EOF
+          📈 美股收市摘要（${DATE} 早上）
+
+          【財經新聞】
+          ${{ steps.ai1.outputs.summary }}
+          MSG_EOF
+          
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A【財經新聞】%0A${{ steps.ai1.outputs.summary }}" \
             --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "disable_web_page_preview=true"
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text@/tmp/msg1.txt"
 
       - name: Send Part 2 to Telegram
         run: |
+          cat > /tmp/msg2.txt << 'MSG_EOF'
+          【AI 相關新聞】
+          MSG_EOF
+          
+          echo "${{ steps.ai2.outputs.summary }}" >> /tmp/msg2.txt
+          
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=【AI 相關新聞】%0A${{ steps.ai2.outputs.summary }}" \
             --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "disable_web_page_preview=true"
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text@/tmp/msg2.txt"
 
       - name: Send Part 3 to Telegram
         run: |
+          cat > /tmp/msg3.txt << 'MSG_EOF'
+          【市場評論 + 投資建議】
+          MSG_EOF
+          
+          echo "${{ steps.ai3.outputs.summary }}" >> /tmp/msg3.txt
+          
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=【市場評論 + 投資建議】%0A${{ steps.ai3.outputs.summary }}" \
             --data-urlencode "parse_mode=HTML" \
-            --data-urlencode "disable_web_page_preview=true"
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text@/tmp/msg3.txt"
