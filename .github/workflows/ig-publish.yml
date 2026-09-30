@@ -1,0 +1,18 @@
+name: Instagram Publish (Test)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test notification
+        run: |
+          echo "✅ Instagram Publish workflow 被觸發！"
+          echo "時間：$(date)"
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=🧪 測試：Instagram Publish workflow 已成功被觸發！時間：$(TZ=Asia/Hong_Kong date +%H:%M)" \
+            --data-urlencode "disable_web_page_preview=true"
