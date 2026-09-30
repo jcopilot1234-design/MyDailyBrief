@@ -37,7 +37,6 @@ jobs:
       - name: Fetch financial news
         id: news
         run: |
-          # 從指定來源抓新聞（用 Google News RSS 過濾）
           SOURCES="wsj.com|bloomberg.com|reuters.com|cnbc.com|morningstar.com|marketwatch.com"
           
           NEWS=""
@@ -71,35 +70,37 @@ jobs:
       - name: Generate AI summary
         id: ai
         run: |
-          PROMPT="以下係美股昨晚收市數據（香港時間今早）：
-          
+          cat > /tmp/prompt.txt << 'PROMPT_EOF'
+          以下係美股昨晚收市數據（香港時間今早）：
+
           ${{ steps.fetch.outputs.data }}
-          
+
           今日財經新聞標題：
           ${{ steps.news.outputs.news }}
-          
+
           AI 相關新聞：
           ${{ steps.ainews.outputs.ainews }}
-          
+
           請用繁體中文生成以下內容：
-          
+
           ## 1. 今日最具影響力財經新聞（10 則 bullet point）
           整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。
-          
+
           ## 2. AI 相關新聞（10 則 bullet point）
           列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。
-          
+
           ## 3. 今日市場評論
           用一段 100-150 字嘅評論，總結當天整體表現。
-          
+
           ## 4. 穩建長期投資建議
           提供 2-3 點穩建長期投資建議。
-          
-          用財經新聞報導嘅語氣，簡潔專業。"
-          
+
+          用財經新聞報導嘅語氣，簡潔專業。
+          PROMPT_EOF
+
           PAYLOAD=$(jq -n \
             --arg model "deepseek-chat" \
-            --arg content "$PROMPT" \
+            --rawfile content /tmp/prompt.txt \
             '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.7}')
           
           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
