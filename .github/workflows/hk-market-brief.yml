@@ -34,7 +34,7 @@ jobs:
           echo -e "$DATA" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Fetch financial news
+      - name: Fetch financial news with URLs
         id: news
         run: |
           SOURCES="etnet.com.hk|hkej.com|scmp.com|bloomberg.com|reuters.com|aastocks.com"
@@ -44,61 +44,61 @@ jobs:
           for SRC in "${SRC_ARRAY[@]}"; do
             RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
               -H "User-Agent: Mozilla/5.0")
-            TITLES=$(echo "$RSS" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//' | head -3)
-            while IFS= read -r TITLE; do
-              [ -n "$TITLE" ] && NEWS="${NEWS}• ${TITLE}\n"
-            done <<< "$TITLES"
+            
+            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -2)
+            while IFS= read -r ITEM; do
+              TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
+              LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
+              SOURCE_NAME=$(echo "$SRC" | cut -d'.' -f1 | tr '[:lower:]' '[:upper:]')
+              [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}"$'\n'"來源: ${SOURCE_NAME} - ${LINK}"$'\n'
+            done <<< "$ITEMS"
           done
           
           echo "news<<EOF" >> $GITHUB_OUTPUT
-          echo -e "$NEWS" >> $GITHUB_OUTPUT
+          echo "$NEWS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Fetch AI news
+      - name: Fetch AI news with URLs
         id: ainews
         run: |
           RSS=$(curl -s "https://news.google.com/rss/search?q=artificial+intelligence+stock+hk&hl=en-US&gl=US&ceid=US:en" \
             -H "User-Agent: Mozilla/5.0")
-          TITLES=$(echo "$RSS" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//' | head -10)
+          
+          AINEWS=""
+          ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -8)
+          while IFS= read -r ITEM; do
+            TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
+            LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
+            SOURCE_NAME=$(echo "$ITEM" | grep -oP '(?<=<source url="[^"]*">)[^<]+' | head -1)
+            [ -z "$SOURCE_NAME" ] && SOURCE_NAME="News"
+            [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}"$'\n'"來源: ${SOURCE_NAME} - ${LINK}"$'\n'
+          done <<< "$ITEMS"
           
           echo "ainews<<EOF" >> $GITHUB_OUTPUT
-          while IFS= read -r TITLE; do
-            [ -n "$TITLE" ] && echo "• ${TITLE}" >> $GITHUB_OUTPUT
-          done <<< "$TITLES"
+          echo "$AINEWS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Generate AI summary
-        id: ai
+      - name: Generate AI summary (Part 1 - News)
+        id: ai1
         run: |
-          PROMPT="以下係香港市場今日收市數據（香港時間下午）：
-          
+          cat > /tmp/prompt1.txt << 'PROMPT_EOF'
+          以下係香港市場今日收市數據（香港時間下午）：
+
           ${{ steps.fetch.outputs.data }}
-          
-          今日財經新聞標題：
+
+          今日財經新聞：
           ${{ steps.news.outputs.news }}
-          
-          AI 相關新聞：
-          ${{ steps.ainews.outputs.ainews }}
-          
-          請用繁體中文生成以下內容：
-          
-          ## 1. 今日最具影響力財經新聞（10 則 bullet point）
-          整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。
-          
-          ## 2. AI 相關新聞（10 則 bullet point）
-          列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。
-          
-          ## 3. 今日市場評論
-          用一段 100-150 字嘅評論，總結當天整體表現。
-          
-          ## 4. 穩建長期投資建議
-          提供 2-3 點穩建長期投資建議。
-          
-          用財經新聞報導嘅語氣，簡潔專業。"
-          
+
+          請用繁體中文列出 8 則今日最具影響力嘅財經新聞、政策改變、重要數據。每則格式：
+          • 標題
+          來源: XXX - https://url
+
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
+          PROMPT_EOF
+
           PAYLOAD=$(jq -n \
             --arg model "deepseek-chat" \
-            --arg content "$PROMPT" \
+            --rawfile content /tmp/prompt1.txt \
             '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.7}')
           
           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
@@ -111,10 +111,106 @@ jobs:
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Send to Telegram
+      - name: Generate AI summary (Part 2 - AI News)
+        id: ai2
         run: |
-          MESSAGE="📉 港股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 下午）%0A%0A${{ steps.ai.outputs.summary }}"
+          cat > /tmp/prompt2.txt << 'PROMPT_EOF'
+          AI 相關新聞：
+          ${{ steps.ainews.outputs.ainews }}
+
+          請用繁體中文列出 8 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則格式：
+          • 標題
+          來源: XXX - https://url
+
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
+          PROMPT_EOF
+
+          PAYLOAD=$(jq -n \
+            --arg model "deepseek-chat" \
+            --rawfile content /tmp/prompt2.txt \
+            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.7}')
+          
+          RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
+            -H "Authorization: Bearer ${{ secrets.DEEPSEEK_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "摘要生成失敗"')
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate AI summary (Part 3 - Commentary)
+        id: ai3
+        run: |
+          cat > /tmp/prompt3.txt << 'PROMPT_EOF'
+          以下係香港市場今日收市數據（香港時間下午）：
+
+          ${{ steps.fetch.outputs.data }}
+
+          請用繁體中文生成：
+
+          今日市場評論：
+          用一段 100-150 字嘅評論，總結今日香港市場整體表現。
+
+          穩建長期投資建議：
+          提供 2-3 點穩建長期投資建議。
+
+          唔好用 Markdown 格式，只用純文字。
+          PROMPT_EOF
+
+          PAYLOAD=$(jq -n \
+            --arg model "deepseek-chat" \
+            --rawfile content /tmp/prompt3.txt \
+            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.7}')
+          
+          RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
+            -H "Authorization: Bearer ${{ secrets.DEEPSEEK_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d "$PAYLOAD")
+          
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "摘要生成失敗"')
+          echo "summary<<EOF" >> $GITHUB_OUTPUT
+          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Send Part 1 to Telegram
+        run: |
+          DATE=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
+          cat > /tmp/msg1.txt << MSG_EOF
+          📉 港股收市摘要（${DATE} 下午）
+
+          【財經新聞】
+          ${{ steps.ai1.outputs.summary }}
+          MSG_EOF
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=$MESSAGE"
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text@/tmp/msg1.txt"
+
+      - name: Send Part 2 to Telegram
+        run: |
+          cat > /tmp/msg2.txt << 'MSG_EOF'
+          【AI 相關新聞】
+          MSG_EOF
+          
+          echo "${{ steps.ai2.outputs.summary }}" >> /tmp/msg2.txt
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text@/tmp/msg2.txt"
+
+      - name: Send Part 3 to Telegram
+        run: |
+          cat > /tmp/msg3.txt << 'MSG_EOF'
+          【市場評論 + 投資建議】
+          MSG_EOF
+          
+          echo "${{ steps.ai3.outputs.summary }}" >> /tmp/msg3.txt
+          
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "disable_web_page_preview=true" \
+            --data-urlencode "text@/tmp/msg3.txt"
