@@ -1,0 +1,41 @@
+name: Instagram Approval Check
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # 每 15 分鐘檢查一次
+  workflow_dispatch:
+
+jobs:
+  check-approval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Telegram for OK
+        id: check
+        run: |
+          RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
+          
+          if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
+            echo "approved=true" >> $GITHUB_OUTPUT
+            echo "✅ 收到批准回覆"
+          else
+            echo "approved=false" >> $GITHUB_OUTPUT
+            echo "⏳ 未收到批准回覆"
+          fi
+
+      - name: Trigger Instagram Publish
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/jcopilot1234-design/MyDailyBrief/actions/workflows/ig-publish.yml/dispatches" \
+            -d '{"ref":"main"}'
+          echo "✅ 已觸發 Instagram Publish workflow"
+
+      - name: Send notification to Telegram
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=✅ 收到批准，正在發佈到 Instagram..." \
+            --data-urlencode "disable_web_page_preview=true"
