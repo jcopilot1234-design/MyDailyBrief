@@ -45,7 +45,6 @@ jobs:
             RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
               -H "User-Agent: Mozilla/5.0")
             
-            # 用 XML 解析攞標題同連結
             ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -3)
             while IFS= read -r ITEM; do
               TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
@@ -93,10 +92,14 @@ jobs:
           請用繁體中文生成以下內容：
 
           ## 1. 今日最具影響力財經新聞（10 則 bullet point）
-          整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。每則都要附上新聞來源 URL（用 markdown 格式：[標題](URL)）。
+          整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。每則都要附上新聞來源 URL。用呢個格式：
+          • 標題
+          https://url
 
           ## 2. AI 相關新聞（10 則 bullet point）
-          列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則都要附上新聞來源 URL（用 markdown 格式：[標題](URL)）。
+          列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則都要附上新聞來源 URL。用呢個格式：
+          • 標題
+          https://url
 
           ## 3. 今日市場評論
           用一段 100-150 字嘅評論，總結當天整體表現。
@@ -104,7 +107,7 @@ jobs:
           ## 4. 穩建長期投資建議
           提供 2-3 點穩建長期投資建議。
 
-          用財經新聞報導嘅語氣，簡潔專業。
+          用財經新聞報導嘅語氣，簡潔專業。唔好用 Markdown 格式（唔好用 *、_、[ ] 等特殊符號），只用純文字同 URL。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
@@ -124,10 +127,10 @@ jobs:
 
       - name: Send to Telegram
         run: |
-          MESSAGE="📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A${{ steps.ai.outputs.summary }}"
+          # 將訊息分成兩段發送（避免太長）
+          PART1="📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A${{ steps.ai.outputs.summary }}"
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=$MESSAGE" \
-            -d "parse_mode=Markdown" \
+            -d "text=$PART1" \
             -d "disable_web_page_preview=true"
