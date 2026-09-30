@@ -37,12 +37,35 @@ jobs:
       - name: Fetch financial news
         id: news
         run: |
-          NEWS=$(curl -s "https://query1.finance.yahoo.com/v1/finance/search?q=stock%20market&newsCount=8" \
-            -H "User-Agent: Mozilla/5.0" \
-            | jq -r '.news[] | "• " + .title' | head -8)
+          # 從指定來源抓新聞（用 Google News RSS 過濾）
+          SOURCES="wsj.com|bloomberg.com|reuters.com|cnbc.com|morningstar.com|marketwatch.com"
+          
+          NEWS=""
+          IFS='|' read -ra SRC_ARRAY <<< "$SOURCES"
+          for SRC in "${SRC_ARRAY[@]}"; do
+            RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
+              -H "User-Agent: Mozilla/5.0")
+            TITLES=$(echo "$RSS" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//' | head -3)
+            while IFS= read -r TITLE; do
+              [ -n "$TITLE" ] && NEWS="${NEWS}• ${TITLE}\n"
+            done <<< "$TITLES"
+          done
           
           echo "news<<EOF" >> $GITHUB_OUTPUT
-          echo "$NEWS" >> $GITHUB_OUTPUT
+          echo -e "$NEWS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Fetch AI news
+        id: ainews
+        run: |
+          RSS=$(curl -s "https://news.google.com/rss/search?q=artificial+intelligence+stock&hl=en-US&gl=US&ceid=US:en" \
+            -H "User-Agent: Mozilla/5.0")
+          TITLES=$(echo "$RSS" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//' | head -10)
+          
+          echo "ainews<<EOF" >> $GITHUB_OUTPUT
+          while IFS= read -r TITLE; do
+            [ -n "$TITLE" ] && echo "• ${TITLE}" >> $GITHUB_OUTPUT
+          done <<< "$TITLES"
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate AI summary
@@ -52,10 +75,27 @@ jobs:
           
           ${{ steps.fetch.outputs.data }}
           
-          最新財經新聞標題：
+          今日財經新聞標題：
           ${{ steps.news.outputs.news }}
           
-          請用繁體中文寫一段 200 字左右嘅摘要，講下：1) 美股三大指數表現 2) 主要科技股走勢 3) 商品市場（黃金、原油、銅）4) 市場情緒（VIX、美債、美元）5) 加密貨幣 6) 結合新聞標題，講下發生咩事。用財經新聞報導嘅語氣，簡潔專業。"
+          AI 相關新聞：
+          ${{ steps.ainews.outputs.ainews }}
+          
+          請用繁體中文生成以下內容：
+          
+          ## 1. 今日最具影響力財經新聞（10 則 bullet point）
+          整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。
+          
+          ## 2. AI 相關新聞（10 則 bullet point）
+          列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。
+          
+          ## 3. 今日市場評論
+          用一段 100-150 字嘅評論，總結當天整體表現。
+          
+          ## 4. 穩建長期投資建議
+          提供 2-3 點穩建長期投資建議。
+          
+          用財經新聞報導嘅語氣，簡潔專業。"
           
           PAYLOAD=$(jq -n \
             --arg model "deepseek-chat" \
@@ -74,7 +114,7 @@ jobs:
 
       - name: Send to Telegram
         run: |
-          MESSAGE="📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A${{ steps.ai.outputs.summary }}%0A%0A📰 財經新聞：%0A${{ steps.news.outputs.news }}"
+          MESSAGE="📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A${{ steps.ai.outputs.summary }}"
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
