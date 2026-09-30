@@ -25,7 +25,7 @@ jobs:
             NAME=$(echo "$RESULT" | jq -r '.chart.result[0].meta.symbol // "N/A"')
             
             if [ "$PRICE" != "N/A" ] && [ "$PREV" != "N/A" ]; then
-              CHANGE=$(echo "scale=2; (($PRICE - $PREV) / $PREV) * 100" | bc)
+              CHANGE=$(awk "BEGIN {printf \"%.2f\", (($PRICE - $PREV) / $PREV) * 100}")
               DATA="${DATA}${NAME}: ${PRICE} (${CHANGE}%)\n"
             fi
           done
@@ -37,7 +37,6 @@ jobs:
       - name: Fetch financial news
         id: news
         run: |
-          # 抓 Yahoo Finance 財經新聞
           NEWS=$(curl -s "https://query1.finance.yahoo.com/v1/finance/search?q=stock%20market&newsCount=8" \
             -H "User-Agent: Mozilla/5.0" \
             | jq -r '.news[] | "• " + .title' | head -8)
@@ -49,18 +48,26 @@ jobs:
       - name: Generate AI summary
         id: ai
         run: |
-          PROMPT="以下係美股昨晚收市數據（香港時間今早）：\n\n${{ steps.fetch.outputs.data }}\n\n最新財經新聞標題：\n${{ steps.news.outputs.news }}\n\n請用繁體中文寫一段 200 字左右嘅摘要，講下：1) 美股三大指數表現 2) 主要科技股走勢 3) 商品市場（黃金、原油、銅）4) 市場情緒（VIX、美債、美元）5) 加密貨幣 6) 結合新聞標題，講下發生咩事。用財經新聞報導嘅語氣，簡潔專業。"
+          PROMPT="以下係美股昨晚收市數據（香港時間今早）：
+          
+          ${{ steps.fetch.outputs.data }}
+          
+          最新財經新聞標題：
+          ${{ steps.news.outputs.news }}
+          
+          請用繁體中文寫一段 200 字左右嘅摘要，講下：1) 美股三大指數表現 2) 主要科技股走勢 3) 商品市場（黃金、原油、銅）4) 市場情緒（VIX、美債、美元）5) 加密貨幣 6) 結合新聞標題，講下發生咩事。用財經新聞報導嘅語氣，簡潔專業。"
+          
+          PAYLOAD=$(jq -n \
+            --arg model "deepseek-chat" \
+            --arg content "$PROMPT" \
+            '{model: $model, messages: [{role: "user", content: $content}], temperature: 0.7}')
           
           RESPONSE=$(curl -s -X POST "https://api.deepseek.com/v1/chat/completions" \
             -H "Authorization: Bearer ${{ secrets.DEEPSEEK_API_KEY }}" \
             -H "Content-Type: application/json" \
-            -d "{
-              \"model\": \"deepseek-chat\",
-              \"messages\": [{\"role\": \"user\", \"content\": \"$PROMPT\"}],
-              \"temperature\": 0.7
-            }")
+            -d "$PAYLOAD")
           
-          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
+          SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content // "摘要生成失敗"')
           echo "summary<<EOF" >> $GITHUB_OUTPUT
           echo "$SUMMARY" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
