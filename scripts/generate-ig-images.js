@@ -15,40 +15,59 @@ async function generateImages() {
   }
   
   // 讀取 HTML 模板
-  const template = fs.readFileSync(
-    path.join(__dirname, '..', 'ig-template.html'),
-    'utf-8'
-  );
+  const templatePath = path.join(__dirname, '..', 'ig-template.html');
+  if (!fs.existsSync(templatePath)) {
+    console.error('❌ 搵唔到 ig-template.html，路徑：', templatePath);
+    process.exit(1);
+  }
+  const template = fs.readFileSync(templatePath, 'utf-8');
   
   // 啟動 Puppeteer
   const browser = await puppeteer.launch({
     headless: 'new',
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu'
+    ]
   });
   
   const page = await browser.newPage();
   await page.setViewport({ width: 1080, height: 1350 });
   
-  // 為每則新聞生成一張圖
+  // 為每則新聞生成一張圖（最多 5 張）
   for (let i = 0; i < newsData.length && i < 5; i++) {
     const news = newsData[i];
     
-    // 替換模板佔位符
-    let html = template
-      .replace('{{LABEL}}', label)
-      .replace('{{TITLE}}', news.title || '')
-      .replace('{{HIGHLIGHT}}', news.highlight ? `<div class="highlight">${news.highlight}</div>` : '')
-      .replace('{{CONTENT}}', news.content || '')
-      .replace('{{SOURCE}}', news.source || 'AI 日報')
-      .replace('{{DATE}}', date);
-    
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    await page.screenshot({
-      path: path.join(outputDir, `card-${i + 1}.png`),
-      type: 'png'
-    });
-    
-    console.log(`✅ 生成 card-${i + 1}.png`);
+    try {
+      // 替換模板佔位符
+      let html = template
+        .replace('{{LABEL}}', label)
+        .replace('{{TITLE}}', news.title || '')
+        .replace('{{HIGHLIGHT}}', news.highlight ? `<div class="highlight">${news.highlight}</div>` : '')
+        .replace('{{CONTENT}}', news.content || '')
+        .replace('{{SOURCE}}', news.source || 'AI 日報')
+        .replace('{{DATE}}', date);
+      
+      // 用 domcontentloaded 代替 networkidle0，避免超時
+      await page.setContent(html, {
+        waitUntil: 'domcontentloaded',
+        timeout: 60000
+      });
+      
+      // 等 500ms 確保 CSS 渲染完成
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      await page.screenshot({
+        path: path.join(outputDir, `card-${i + 1}.png`),
+        type: 'png'
+      });
+      
+      console.log(`✅ 生成 card-${i + 1}.png`);
+    } catch (err) {
+      console.error(`❌ card-${i + 1}.png 失敗：`, err.message);
+    }
   }
   
   await browser.close();
