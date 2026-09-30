@@ -34,7 +34,7 @@ jobs:
           echo -e "$DATA" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Fetch financial news
+      - name: Fetch financial news with URLs
         id: news
         run: |
           SOURCES="wsj.com|bloomberg.com|reuters.com|cnbc.com|morningstar.com|marketwatch.com"
@@ -44,27 +44,36 @@ jobs:
           for SRC in "${SRC_ARRAY[@]}"; do
             RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
               -H "User-Agent: Mozilla/5.0")
-            TITLES=$(echo "$RSS" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//' | head -3)
-            while IFS= read -r TITLE; do
-              [ -n "$TITLE" ] && NEWS="${NEWS}• ${TITLE}\n"
-            done <<< "$TITLES"
+            
+            # 用 XML 解析攞標題同連結
+            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -3)
+            while IFS= read -r ITEM; do
+              TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
+              LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
+              [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}\n  ${LINK}\n"
+            done <<< "$ITEMS"
           done
           
           echo "news<<EOF" >> $GITHUB_OUTPUT
           echo -e "$NEWS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
-      - name: Fetch AI news
+      - name: Fetch AI news with URLs
         id: ainews
         run: |
           RSS=$(curl -s "https://news.google.com/rss/search?q=artificial+intelligence+stock&hl=en-US&gl=US&ceid=US:en" \
             -H "User-Agent: Mozilla/5.0")
-          TITLES=$(echo "$RSS" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//' | head -10)
+          
+          AINEWS=""
+          ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -10)
+          while IFS= read -r ITEM; do
+            TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
+            LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
+            [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}\n  ${LINK}\n"
+          done <<< "$ITEMS"
           
           echo "ainews<<EOF" >> $GITHUB_OUTPUT
-          while IFS= read -r TITLE; do
-            [ -n "$TITLE" ] && echo "• ${TITLE}" >> $GITHUB_OUTPUT
-          done <<< "$TITLES"
+          echo -e "$AINEWS" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate AI summary
@@ -75,19 +84,19 @@ jobs:
 
           ${{ steps.fetch.outputs.data }}
 
-          今日財經新聞標題：
+          今日財經新聞標題（附連結）：
           ${{ steps.news.outputs.news }}
 
-          AI 相關新聞：
+          AI 相關新聞（附連結）：
           ${{ steps.ainews.outputs.ainews }}
 
           請用繁體中文生成以下內容：
 
           ## 1. 今日最具影響力財經新聞（10 則 bullet point）
-          整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。
+          整合新聞標題同數據，列出 10 則最重要嘅財經新聞、政策改變、重要數據。每則都要附上新聞來源 URL（用 markdown 格式：[標題](URL)）。
 
           ## 2. AI 相關新聞（10 則 bullet point）
-          列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。
+          列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則都要附上新聞來源 URL（用 markdown 格式：[標題](URL)）。
 
           ## 3. 今日市場評論
           用一段 100-150 字嘅評論，總結當天整體表現。
@@ -119,4 +128,6 @@ jobs:
           
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=$MESSAGE"
+            -d "text=$MESSAGE" \
+            -d "parse_mode=Markdown" \
+            -d "disable_web_page_preview=true"
