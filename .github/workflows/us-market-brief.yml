@@ -45,11 +45,13 @@ jobs:
             RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
               -H "User-Agent: Mozilla/5.0")
             
-            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -3)
+            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -2)
             while IFS= read -r ITEM; do
               TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
               LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
-              [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}\n  ${LINK}\n"
+              SOURCE_NAME=$(echo "$ITEM" | grep -oP '(?<=<source url="[^"]*">)[^<]+' | head -1)
+              [ -z "$SOURCE_NAME" ] && SOURCE_NAME=$(echo "$SRC" | cut -d'.' -f1 | tr '[:lower:]' '[:upper:]')
+              [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}\n  <a href=\"${LINK}\">${SOURCE_NAME}</a>\n"
             done <<< "$ITEMS"
           done
           
@@ -64,11 +66,13 @@ jobs:
             -H "User-Agent: Mozilla/5.0")
           
           AINEWS=""
-          ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -10)
+          ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -8)
           while IFS= read -r ITEM; do
             TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
             LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
-            [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}\n  ${LINK}\n"
+            SOURCE_NAME=$(echo "$ITEM" | grep -oP '(?<=<source url="[^"]*">)[^<]+' | head -1)
+            [ -z "$SOURCE_NAME" ] && SOURCE_NAME="News"
+            [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}\n  <a href=\"${LINK}\">${SOURCE_NAME}</a>\n"
           done <<< "$ITEMS"
           
           echo "ainews<<EOF" >> $GITHUB_OUTPUT
@@ -83,14 +87,14 @@ jobs:
 
           ${{ steps.fetch.outputs.data }}
 
-          今日財經新聞標題（附連結）：
+          今日財經新聞（附 HTML 連結）：
           ${{ steps.news.outputs.news }}
 
-          請用繁體中文列出 10 則今日最具影響力嘅財經新聞、政策改變、重要數據。每則格式：
+          請用繁體中文列出 8 則今日最具影響力嘅財經新聞、政策改變、重要數據。每則格式（保留原有 HTML 連結）：
           • 標題
-          https://url
+          <a href="URL">來源</a>
 
-          唔好用 Markdown 格式，只用純文字同 URL。
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
@@ -112,14 +116,14 @@ jobs:
         id: ai2
         run: |
           cat > /tmp/prompt2.txt << 'PROMPT_EOF'
-          AI 相關新聞：
+          AI 相關新聞（附 HTML 連結）：
           ${{ steps.ainews.outputs.ainews }}
 
-          請用繁體中文列出 10 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則格式：
+          請用繁體中文列出 8 則 AI 相關新聞，包括相關概念股表現同重要 AI 發展。每則格式（保留原有 HTML 連結）：
           • 標題
-          https://url
+          <a href="URL">來源</a>
 
-          唔好用 Markdown 格式，只用純文字同 URL。
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
@@ -174,20 +178,23 @@ jobs:
       - name: Send Part 1 to Telegram
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A【財經新聞】%0A${{ steps.ai1.outputs.summary }}" \
-            -d "disable_web_page_preview=true"
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=📈 美股收市摘要（$(TZ=Asia/Hong_Kong date +%Y-%m-%d) 早上）%0A%0A【財經新聞】%0A${{ steps.ai1.outputs.summary }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true"
 
       - name: Send Part 2 to Telegram
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=【AI 相關新聞】%0A${{ steps.ai2.outputs.summary }}" \
-            -d "disable_web_page_preview=true"
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=【AI 相關新聞】%0A${{ steps.ai2.outputs.summary }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true"
 
       - name: Send Part 3 to Telegram
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            -d "text=【市場評論 + 投資建議】%0A${{ steps.ai3.outputs.summary }}" \
-            -d "disable_web_page_preview=true"
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=【市場評論 + 投資建議】%0A${{ steps.ai3.outputs.summary }}" \
+            --data-urlencode "parse_mode=HTML" \
+            --data-urlencode "disable_web_page_preview=true"
