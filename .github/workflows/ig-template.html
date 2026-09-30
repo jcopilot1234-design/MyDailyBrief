@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    width: 1080px;
+    height: 1350px;
+    font-family: 'Noto Sans CJK TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+    background: linear-gradient(135deg, #0a1628 0%, #1a2a4a 50%, #0d1f3c 100%);
+    color: #ffffff;
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* 背景裝飾線條 */
+  .bg-grid {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-image: 
+      linear-gradient(rgba(100, 150, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(100, 150, 255, 0.05) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+  
+  /* 頂部裝飾光暈 */
+  .glow-top {
+    position: absolute;
+    top: -200px; left: 50%;
+    transform: translateX(-50%);
+    width: 800px; height: 400px;
+    background: radial-gradient(ellipse, rgba(255, 200, 80, 0.15) 0%, transparent 70%);
+  }
+  
+  /* 底部裝飾光暈 */
+  .glow-bottom {
+    position: absolute;
+    bottom: -200px; left: 50%;
+    transform: translateX(-50%);
+    width: 1000px; height: 400px;
+    background: radial-gradient(ellipse, rgba(80, 150, 255, 0.1) 0%, transparent 70%);
+  }
+  
+  /* 內容容器 */
+  .container {
+    position: relative;
+    z-index: 10;
+    padding: 80px 70px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  /* 頂部列 */
+  .top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 80px;
+  }
+  
+  .label {
+    display: inline-block;
+    padding: 12px 28px;
+    background: rgba(255, 200, 80, 0.15);
+    border: 2px solid rgba(255, 200, 80, 0.6);
+    border-radius: 30px;
+    font-size: 24px;
+    font-weight: 600;
+    color: #ffc850;
+    letter-spacing: 2px;
+  }
+  
+  .brand {
+    font-size: 26px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 1px;
+  }
+  
+  .brand-sub {
+    font-size: 18px;
+    color: #8899bb;
+    margin-top: 4px;
+    letter-spacing: 3px;
+  }
+  
+  /* 主標題 */
+  .title {
+    font-size: 72px;
+    font-weight: 900;
+    line-height: 1.2;
+    color: #ffffff;
+    margin-bottom: 40px;
+    letter-spacing: -1px;
+  }
+  
+  /* 重點數字 */
+  .highlight {
+    font-size: 140px;
+    font-weight: 900;
+    background: linear-gradient(180deg, #ffd970 0%, #ffb020 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 30px;
+    letter-spacing: -3px;
+  }
+  
+  /* 內文 */
+  .content {
+    font-size: 32px;
+    line-height: 1.7;
+    color: #c8d4e8;
+    margin-bottom: auto;
+    font-weight: 400;
+  }
+  
+  /* 裝飾線條 */
+  .divider {
+    width: 120px;
+    height: 4px;
+    background: linear-gradient(90deg, #ffc850 0%, transparent 100%);
+    margin: 40px 0;
+  }
+  
+  /* 底部資訊 */
+  .footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 40px;
+    border-top: 1px solid rgba(100, 150, 255, 0.2);
+    font-size: 22px;
+    color: #8899bb;
+  }
+  
+  .source {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  
+  .source-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(255, 200, 80, 0.2);
+    border: 2px solid #ffc850;
+  }
+  
+  .date {
+    font-size: 20px;
+    color: #667799;
+  }
+  
+  /* 裝飾圖表 */
+  .chart-decoration {
+    position: absolute;
+    bottom: 200px;
+    right: 60px;
+    opacity: 0.15;
+  }
+  
+  .chart-line {
+    stroke: #ffc850;
+    stroke-width: 3;
+    fill: none;
+  }
+</style>
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="glow-top"></div>
+  <div class="glow-bottom"></div>
+  
+  <!-- 裝飾圖表 -->
+  <svg class="chart-decoration" width="400" height="200" viewBox="0 0 400 200">
+    <polyline class="chart-line" points="0,180 50,160 100,140 150,150 200,120 250,90 300,70 350,50 400,30"/>
+  </svg>
+  
+  <div class="container">
+    <div class="top-row">
+      <div class="label">{{LABEL}}</div>
+      <div>
+        <div class="brand">AI 日報</div>
+        <div class="brand-sub">DAILY BRIEF</div>
+      </div>
+    </div>
+    
+    <div class="title">{{TITLE}}</div>
+    
+    {{HIGHLIGHT}}
+    
+    <div class="divider"></div>
+    
+    <div class="content">{{CONTENT}}</div>
+    
+    <div class="footer">
+      <div class="source">
+        <div class="source-icon"></div>
+        <span>來源：{{SOURCE}}</span>
+      </div>
+      <div class="date">{{DATE}}</div>
+    </div>
+  </div>
+</body>
+</html>
