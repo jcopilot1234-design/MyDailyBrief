@@ -45,11 +45,25 @@ jobs:
             RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
               -H "User-Agent: Mozilla/5.0")
             
-            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -2)
+            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -10)
             while IFS= read -r ITEM; do
               TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
               LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
               SOURCE_NAME=$(echo "$SRC" | cut -d'.' -f1 | tr '[:lower:]' '[:upper:]')
+              
+              # 過濾非新聞內容
+              if [[ "$TITLE" =~ (Quote|Real-time|Streaming|Stock Code|printmgr|Download|Login|Sign Up|Subscribe|Home Page|Site Map|Cookie|Privacy) ]]; then
+                continue
+              fi
+              # 過濾太短嘅標題
+              if [ ${#TITLE} -lt 20 ]; then
+                continue
+              fi
+              # 過濾純數字或股票代號
+              if [[ "$TITLE" =~ ^[0-9]+$ ]] || [[ "$TITLE" =~ ^[A-Z0-9]+$ ]]; then
+                continue
+              fi
+              
               [ -n "$TITLE" ] && [ -n "$LINK" ] && NEWS="${NEWS}• ${TITLE}"$'\n'"來源: ${SOURCE_NAME} - ${LINK}"$'\n'
             done <<< "$ITEMS"
           done
@@ -65,12 +79,20 @@ jobs:
             -H "User-Agent: Mozilla/5.0")
           
           AINEWS=""
-          ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -8)
+          ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -10)
           while IFS= read -r ITEM; do
             TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
             LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
             SOURCE_NAME=$(echo "$ITEM" | grep -oP '(?<=<source url="[^"]*">)[^<]+' | head -1)
             [ -z "$SOURCE_NAME" ] && SOURCE_NAME="News"
+            
+            if [[ "$TITLE" =~ (Quote|Real-time|Streaming|Stock Code|printmgr|Download|Login|Sign Up) ]]; then
+              continue
+            fi
+            if [ ${#TITLE} -lt 20 ]; then
+              continue
+            fi
+            
             [ -n "$TITLE" ] && [ -n "$LINK" ] && AINEWS="${AINEWS}• ${TITLE}"$'\n'"來源: ${SOURCE_NAME} - ${LINK}"$'\n'
           done <<< "$ITEMS"
           
@@ -93,7 +115,7 @@ jobs:
           • 標題
           來源: XXX - https://url
 
-          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。如果冇足夠新聞，就列出手頭上所有。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
@@ -122,7 +144,7 @@ jobs:
           • 標題
           來源: XXX - https://url
 
-          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。如果冇足夠新聞，就列出手頭上所有。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
