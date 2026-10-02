@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -79,6 +81,9 @@ jobs:
           # 先將圖片複製到臨時位置
           mkdir -p /tmp/ig-images
           cp ig-output/*.png /tmp/ig-images/
+          
+          # 將所有未 commit 嘅改動暫存
+          git stash --include-untracked
           
           # 切換到 gh-pages 分支
           git fetch origin gh-pages
