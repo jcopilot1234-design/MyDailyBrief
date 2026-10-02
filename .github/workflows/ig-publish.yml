@@ -1,4 +1,90 @@
-      - name: Instagram Publish
+name: Instagram Publish
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          npm install puppeteer
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Fetch news data
+        id: fetch
+        run: |
+          cat > /tmp/news.json << 'NEWS_EOF'
+          [
+            {
+              "title": "美股三大指數全線偏軟",
+              "highlight": "-0.92%",
+              "content": "道指跌 0.92%，標普 500 跌 0.94%，納指跌 1%。科技股表現分化，蘋果急挫 3.42%，特斯拉大跌 5.18%。",
+              "source": "Reuters"
+            },
+            {
+              "title": "十年期美債孳息率升至 5.25 厘",
+              "highlight": "5.25%",
+              "content": "美債孳息率持續上升，壓抑估值。市場關注聯儲局未來利率政策走向。",
+              "source": "Bloomberg"
+            },
+            {
+              "title": "黃金升 0.81%，銅升 1.5%",
+              "highlight": "+1.5%",
+              "content": "商品市場表現分化，黃金升 0.81%，銅升 1.5%，油價靠穩。避險情緒略降。",
+              "source": "MarketWatch"
+            },
+            {
+              "title": "比特幣跌 0.64%",
+              "highlight": "-0.64%",
+              "content": "加密貨幣偏軟，比特幣跌 0.64%，市場觀望氣氛濃厚。",
+              "source": "CNBC"
+            },
+            {
+              "title": "Nvidia 加碼 150 億美元回購",
+              "highlight": "$15B",
+              "content": "Nvidia 宣布加碼 150 億美元股票回購，為史上最大規模，顯示管理層對前景有信心。",
+              "source": "WSJ"
+            }
+          ]
+          NEWS_EOF
+          
+          echo "news_data<<EOF" >> $GITHUB_OUTPUT
+          cat /tmp/news.json >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Generate IG images
+        env:
+          NEWS_DATA: ${{ steps.fetch.outputs.news_data }}
+          IG_LABEL: "美股日報"
+          IG_DATE: ${{ github.run_id }}
+        run: |
+          node scripts/generate-ig-images.js
+          ls -la ig-output/
+
+      - name: Commit images to GitHub Pages
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          mkdir -p docs/ig-images
+          cp ig-output/*.png docs/ig-images/
+          git add docs/ig-images/
+          git commit -m "Add IG images $(date +%Y-%m-%d)" || echo "No changes"
+          git push
+
+      - name: Wait for GitHub Pages
+        run: sleep 60
+
+      - name: Publish to Instagram Carousel
         env:
           IG_TOKEN: ${{ secrets.IG_PAGE_ACCESS_TOKEN }}
           IG_ACCOUNT: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
@@ -26,3 +112,36 @@
           
           echo "=== 所有容器 ==="
           echo "CONTAINERS: ${CONTAINERS}"
+          
+          # 建立 Carousel 容器
+          CAPTION=$(printf "今日財經重點 📊\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資")
+          
+          CAROUSEL_ID=$(curl -s -X POST \
+            "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media" \
+            --data-urlencode "media_type=CAROUSEL" \
+            --data-urlencode "children=${CONTAINERS}" \
+            --data-urlencode "caption=${CAPTION}" \
+            --data-urlencode "access_token=${IG_TOKEN}" \
+            | jq -r '.id // "null"')
+          
+          echo "Carousel 容器: $CAROUSEL_ID"
+          sleep 10
+          
+          # 正式發佈
+          if [ "$CAROUSEL_ID" != "null" ]; then
+            RESULT=$(curl -s -X POST \
+              "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media_publish" \
+              --data-urlencode "creation_id=${CAROUSEL_ID}" \
+              --data-urlencode "access_token=${IG_TOKEN}")
+            echo "發佈結果: $RESULT"
+          else
+            echo "❌ Carousel 容器建立失敗，跳過發佈"
+          fi
+
+      - name: Send confirmation to Telegram
+        if: always()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=✅ Instagram Carousel 發佈流程完成！" \
+            --data-urlencode "disable_web_page_preview=true"
