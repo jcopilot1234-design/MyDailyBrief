@@ -20,11 +20,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
 
-      - name: Fetch news data from Telegram
+      - name: Fetch news data
         id: fetch
         run: |
-          # 從 Telegram 攞最新嘅新聞摘要（簡化版：用固定測試數據）
-          # 實際應用時，可以從 Telegram API 攞最新訊息
           cat > /tmp/news.json << 'NEWS_EOF'
           [
             {
@@ -87,16 +85,19 @@ jobs:
         run: sleep 60
 
       - name: Publish to Instagram Carousel
+        env:
+          IG_TOKEN: ${{ secrets.IG_PAGE_ACCESS_TOKEN }}
+          IG_ACCOUNT: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
         run: |
           # 建立 5 個媒體容器
           CONTAINERS=""
           for i in 1 2 3 4 5; do
             IMAGE_URL="https://jcopilot1234-design.github.io/MyDailyBrief/ig-images/card-${i}.png"
             CONTAINER_ID=$(curl -s -X POST \
-              "https://graph.facebook.com/v22.0/${{ secrets.IG_BUSINESS_ACCOUNT_ID }}/media" \
-              -d "image_url=${IMAGE_URL}" \
-              -d "is_carousel_item=true" \
-              -d "access_token=${{ secrets.IG_PAGE_ACCESS_TOKEN }}" \
+              "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media" \
+              --data-urlencode "image_url=${IMAGE_URL}" \
+              --data-urlencode "is_carousel_item=true" \
+              --data-urlencode "access_token=${IG_TOKEN}" \
               | jq -r '.id')
             echo "容器 $i: $CONTAINER_ID"
             CONTAINERS="${CONTAINERS}${CONTAINER_ID},"
@@ -104,31 +105,31 @@ jobs:
           CONTAINERS=${CONTAINERS%,}
           
           # 建立 Carousel 容器
-          CAPTION="今日財經重點 📊
-
-          #美股 #港股 #財經新聞 #AI新聞快訊 #長期投資"
+          CAPTION=$(printf "今日財經重點 📊\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資")
           
           CAROUSEL_ID=$(curl -s -X POST \
-            "https://graph.facebook.com/v22.0/${{ secrets.IG_BUSINESS_ACCOUNT_ID }}/media" \
-            -d "media_type=CAROUSEL" \
-            -d "children=${CONTAINERS}" \
-            -d "caption=${CAPTION}" \
-            -d "access_token=${{ secrets.IG_PAGE_ACCESS_TOKEN }}" \
+            "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media" \
+            --data-urlencode "media_type=CAROUSEL" \
+            --data-urlencode "children=${CONTAINERS}" \
+            --data-urlencode "caption=${CAPTION}" \
+            --data-urlencode "access_token=${IG_TOKEN}" \
             | jq -r '.id')
           
           echo "Carousel 容器: $CAROUSEL_ID"
           sleep 10
           
           # 正式發佈
-          curl -s -X POST \
-            "https://graph.facebook.com/v22.0/${{ secrets.IG_BUSINESS_ACCOUNT_ID }}/media_publish" \
-            -d "creation_id=${CAROUSEL_ID}" \
-            -d "access_token=${{ secrets.IG_PAGE_ACCESS_TOKEN }}"
+          RESULT=$(curl -s -X POST \
+            "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media_publish" \
+            --data-urlencode "creation_id=${CAROUSEL_ID}" \
+            --data-urlencode "access_token=${IG_TOKEN}")
+          
+          echo "發佈結果: $RESULT"
 
       - name: Send confirmation to Telegram
         if: always()
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=✅ Instagram Carousel 發佈完成！" \
+            --data-urlencode "text=✅ Instagram Carousel 發佈流程完成！" \
             --data-urlencode "disable_web_page_preview=true"
