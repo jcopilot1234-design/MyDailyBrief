@@ -1,4 +1,4 @@
-      - name: Publish to Instagram Carousel
+      - name: Instagram Publish
         env:
           IG_TOKEN: ${{ secrets.IG_PAGE_ACCESS_TOKEN }}
           IG_ACCOUNT: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
