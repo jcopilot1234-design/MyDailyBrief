@@ -71,15 +71,27 @@ jobs:
           node scripts/generate-ig-images.js
           ls -la ig-output/
 
-      - name: Commit images to GitHub Pages
+      - name: Commit images to gh-pages
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
-          mkdir -p docs/ig-images
-          cp ig-output/*.png docs/ig-images/
-          git add docs/ig-images/
+          
+          # 先將圖片複製到臨時位置
+          mkdir -p /tmp/ig-images
+          cp ig-output/*.png /tmp/ig-images/
+          
+          # 切換到 gh-pages 分支
+          git fetch origin gh-pages
+          git checkout gh-pages
+          
+          # 建立 ig-images 資料夾
+          mkdir -p ig-images
+          cp /tmp/ig-images/*.png ig-images/
+          
+          # Commit 同 Push
+          git add ig-images/
           git commit -m "Add IG images $(date +%Y-%m-%d)" || echo "No changes"
-          git push
+          git push origin gh-pages
 
       - name: Wait for GitHub Pages
         run: sleep 60
