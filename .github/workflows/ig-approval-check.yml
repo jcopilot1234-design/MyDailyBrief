@@ -2,18 +2,24 @@ name: Instagram Approval Check
 
 on:
   schedule:
-    - cron: '*/15 * * * *'  # 每 15 分鐘檢查一次
+    - cron: '*/5 * * * *'  # 每 5 分鐘檢查一次
   workflow_dispatch:
 
 jobs:
   check-approval:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Check Telegram for OK
         id: check
         run: |
+          # 攞 Telegram 更新
           RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
           
+          # 檢查有冇 "OK" 或 "ok" 回覆
           if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
             echo "approved=true" >> $GITHUB_OUTPUT
             echo "✅ 收到批准回覆"
@@ -22,20 +28,30 @@ jobs:
             echo "⏳ 未收到批准回覆"
           fi
 
-      - name: Trigger Instagram Publish
+      - name: Update ig-status.json
         if: steps.check.outputs.approved == 'true'
         run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            "https://api.github.com/repos/jcopilot1234-design/MyDailyBrief/actions/workflows/ig-publish.yml/dispatches" \
-            -d '{"ref":"main"}'
-          echo "✅ 已觸發 Instagram Publish workflow"
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          
+          # 攞今日日期
+          TODAY=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
+          
+          # 用 jq 更新 status
+          jq --arg date "$TODAY" '.us_approved = true | .us_approved_date = $date' ig-status.json > /tmp/ig-status.json
+          mv /tmp/ig-status.json ig-status.json
+          
+          # Commit
+          git add ig-status.json
+          git commit -m "Approved US market for $TODAY" || echo "No changes"
+          git push
+          
+          echo "✅ 已記錄批准狀態"
 
-      - name: Send notification to Telegram
+      - name: Notify Telegram
         if: steps.check.outputs.approved == 'true'
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=✅ 收到批准，正在發佈到 Instagram..." \
+            --data-urlencode "text=✅ 已收到批准！將於 8:30AM 自動發佈到 Instagram。" \
             --data-urlencode "disable_web_page_preview=true"
