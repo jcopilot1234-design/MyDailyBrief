@@ -1,107 +1,130 @@
 name: Instagram Publish
 
 on:
+  schedule:
+    - cron: '30 0 * * 1-5'  # UTC 00:30 = HKT 08:30（美股）
+    - cron: '30 9 * * 1-5'  # UTC 09:30 = HKT 17:30（港股）
   workflow_dispatch:
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Check approval status
+        id: check
+        run: |
+          # 讀取 ig-status.json
+          US_APPROVED=$(jq -r '.us_approved' ig-status.json)
+          HK_APPROVED=$(jq -r '.hk_approved' ig-status.json)
+          
+          echo "US approved: $US_APPROVED"
+          echo "HK approved: $HK_APPROVED"
+          
+          # 判斷而家係咪應該發
+          HOUR=$(TZ=Asia/Hong_Kong date +%H)
+          
+          if [ "$HOUR" = "08" ] && [ "$US_APPROVED" = "true" ]; then
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "market=us" >> $GITHUB_OUTPUT
+            echo "✅ 美股已批准，開始發佈"
+          elif [ "$HOUR" = "17" ] && [ "$HK_APPROVED" = "true" ]; then
+            echo "publish=true" >> $GITHUB_OUTPUT
+            echo "market=hk" >> $GITHUB_OUTPUT
+            echo "✅ 港股已批准，開始發佈"
+          else
+            echo "publish=false" >> $GITHUB_OUTPUT
+            echo "⏳ 未批准或唔係發佈時間"
+          fi
+
       - name: Setup Node.js
+        if: steps.check.outputs.publish == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Install dependencies
+        if: steps.check.outputs.publish == 'true'
         run: |
           npm install puppeteer
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
 
       - name: Fetch news data
+        if: steps.check.outputs.publish == 'true'
         id: fetch
         run: |
-          cat > /tmp/news.json << 'NEWS_EOF'
+          MARKET="${{ steps.check.outputs.market }}"
+          
+          if [ "$MARKET" = "us" ]; then
+            cat > /tmp/news.json << 'NEWS_EOF'
           [
             {
               "title": "美股三大指數全線偏軟",
               "highlight": "-0.92%",
-              "content": "道指跌 0.92%，標普 500 跌 0.94%，納指跌 1%。科技股表現分化，蘋果急挫 3.42%，特斯拉大跌 5.18%。",
+              "content": "道指跌 0.92%，標普 500 跌 0.94%，納指跌 1%。",
               "source": "Reuters"
-            },
-            {
-              "title": "十年期美債孳息率升至 5.25 厘",
-              "highlight": "5.25%",
-              "content": "美債孳息率持續上升，壓抑估值。市場關注聯儲局未來利率政策走向。",
-              "source": "Bloomberg"
-            },
-            {
-              "title": "黃金升 0.81%，銅升 1.5%",
-              "highlight": "+1.5%",
-              "content": "商品市場表現分化，黃金升 0.81%，銅升 1.5%，油價靠穩。避險情緒略降。",
-              "source": "MarketWatch"
-            },
-            {
-              "title": "比特幣跌 0.64%",
-              "highlight": "-0.64%",
-              "content": "加密貨幣偏軟，比特幣跌 0.64%，市場觀望氣氛濃厚。",
-              "source": "CNBC"
-            },
-            {
-              "title": "Nvidia 加碼 150 億美元回購",
-              "highlight": "$15B",
-              "content": "Nvidia 宣布加碼 150 億美元股票回購，為史上最大規模，顯示管理層對前景有信心。",
-              "source": "WSJ"
             }
           ]
           NEWS_EOF
+          else
+            cat > /tmp/news.json << 'NEWS_EOF'
+          [
+            {
+              "title": "港股恒指收市表現",
+              "highlight": "+0.5%",
+              "content": "恒指收市升 0.5%，科技股帶動。",
+              "source": "SCMP"
+            }
+          ]
+          NEWS_EOF
+          fi
           
           echo "news_data<<EOF" >> $GITHUB_OUTPUT
           cat /tmp/news.json >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate IG images
+        if: steps.check.outputs.publish == 'true'
         env:
           NEWS_DATA: ${{ steps.fetch.outputs.news_data }}
-          IG_LABEL: "美股日報"
+          IG_LABEL: ${{ steps.check.outputs.market == 'us' && '美股日報' || '港股日報' }}
           IG_DATE: ${{ github.run_id }}
         run: |
           node scripts/generate-ig-images.js
           ls -la ig-output/
 
       - name: Commit images to gh-pages
+        if: steps.check.outputs.publish == 'true'
         run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           
-          # 先將圖片複製到臨時位置
           mkdir -p /tmp/ig-images
           cp ig-output/*.png /tmp/ig-images/
           
-          # 將所有未 commit 嘅改動暫存
           git stash --include-untracked
-          
-          # 切換到 gh-pages 分支
           git fetch origin gh-pages
           git checkout gh-pages
           
-          # 建立 ig-images 資料夾
           mkdir -p ig-images
           cp /tmp/ig-images/*.png ig-images/
           
-          # Commit 同 Push
           git add ig-images/
           git commit -m "Add IG images $(date +%Y-%m-%d)" || echo "No changes"
           git push origin gh-pages
 
       - name: Wait for GitHub Pages
+        if: steps.check.outputs.publish == 'true'
         run: sleep 60
 
       - name: Publish to Instagram Carousel
+        if: steps.check.outputs.publish == 'true'
         env:
           IG_TOKEN: ${{ secrets.IG_PAGE_ACCESS_TOKEN }}
           IG_ACCOUNT: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
@@ -110,27 +133,17 @@ jobs:
           CONTAINERS=""
           for i in 1 2 3 4 5; do
             IMAGE_URL="https://jcopilot1234-design.github.io/MyDailyBrief/ig-images/card-${i}.png"
-            echo "=== 容器 $i ==="
-            echo "圖片 URL: ${IMAGE_URL}"
-            
             RESPONSE=$(curl -s -X POST \
               "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media" \
               --data-urlencode "image_url=${IMAGE_URL}" \
               --data-urlencode "is_carousel_item=true" \
               --data-urlencode "access_token=${IG_TOKEN}")
-            
-            echo "回傳: ${RESPONSE}"
-            
             CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.id // "null"')
             echo "容器 $i: $CONTAINER_ID"
             CONTAINERS="${CONTAINERS}${CONTAINER_ID},"
           done
           CONTAINERS=${CONTAINERS%,}
           
-          echo "=== 所有容器 ==="
-          echo "CONTAINERS: ${CONTAINERS}"
-          
-          # 建立 Carousel 容器
           CAPTION=$(printf "今日財經重點 📊\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資")
           
           CAROUSEL_ID=$(curl -s -X POST \
@@ -144,21 +157,34 @@ jobs:
           echo "Carousel 容器: $CAROUSEL_ID"
           sleep 10
           
-          # 正式發佈
           if [ "$CAROUSEL_ID" != "null" ]; then
             RESULT=$(curl -s -X POST \
               "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media_publish" \
               --data-urlencode "creation_id=${CAROUSEL_ID}" \
               --data-urlencode "access_token=${IG_TOKEN}")
             echo "發佈結果: $RESULT"
-          else
-            echo "❌ Carousel 容器建立失敗，跳過發佈"
           fi
 
-      - name: Send confirmation to Telegram
-        if: always()
+      - name: Reset approval status
+        if: steps.check.outputs.publish == 'true'
+        run: |
+          MARKET="${{ steps.check.outputs.market }}"
+          
+          if [ "$MARKET" = "us" ]; then
+            jq '.us_approved = false | .us_approved_date = null' ig-status.json > /tmp/ig-status.json
+          else
+            jq '.hk_approved = false | .hk_approved_date = null' ig-status.json > /tmp/ig-status.json
+          fi
+          mv /tmp/ig-status.json ig-status.json
+          
+          git add ig-status.json
+          git commit -m "Reset approval status for $MARKET" || echo "No changes"
+          git push
+
+      - name: Notify Telegram
+        if: steps.check.outputs.publish == 'true'
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=✅ Instagram Carousel 發佈流程完成！" \
+            --data-urlencode "text=✅ 已成功發佈到 Instagram！" \
             --data-urlencode "disable_web_page_preview=true"
