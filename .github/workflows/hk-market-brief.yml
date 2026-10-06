@@ -1,8 +1,8 @@
-name: HK Market Brief (4:30PM HKT)
+name: HK Market Brief (5PM HKT)
 
 on:
   schedule:
-    - cron: '30 8 * * *'  # UTC 08:30 = 香港時間 16:30
+    - cron: '0 9 * * 1-5'  # UTC 星期一至五 09:00 = 香港時間星期一至五 17:00
   workflow_dispatch:
 
 jobs:
@@ -51,15 +51,12 @@ jobs:
               LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
               SOURCE_NAME=$(echo "$SRC" | cut -d'.' -f1 | tr '[:lower:]' '[:upper:]')
               
-              # 過濾非新聞內容
               if [[ "$TITLE" =~ (Quote|Real-time|Streaming|Stock Code|printmgr|Download|Login|Sign Up|Subscribe|Home Page|Site Map|Cookie|Privacy) ]]; then
                 continue
               fi
-              # 過濾太短嘅標題
               if [ ${#TITLE} -lt 20 ]; then
                 continue
               fi
-              # 過濾純數字或股票代號
               if [[ "$TITLE" =~ ^[0-9]+$ ]] || [[ "$TITLE" =~ ^[A-Z0-9]+$ ]]; then
                 continue
               fi
@@ -115,7 +112,7 @@ jobs:
           • 標題
           來源: XXX - https://url
 
-          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。如果冇足夠新聞，就列出手頭上所有。
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
@@ -144,7 +141,7 @@ jobs:
           • 標題
           來源: XXX - https://url
 
-          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。如果冇足夠新聞，就列出手頭上所有。
+          只輸出 8 則，唔好加額外解釋。唔好用 Markdown 格式。
           PROMPT_EOF
 
           PAYLOAD=$(jq -n \
