@@ -20,7 +20,8 @@ jobs:
             RESULT=$(curl -s "https://query1.finance.yahoo.com/v8/finance/chart/${SYM}?interval=1d&range=5d" \
               -H "User-Agent: Mozilla/5.0")
             
-            CLOSES=$(echo "$RESULT" | jq -r '.chart.result[0].indicators.quote[0].close[] | select(. != null)')
+            # 加 ? 避免 null crash
+            CLOSES=$(echo "$RESULT" | jq -r '.chart.result[0].indicators.quote[0].close[]? | select(. != null)')
             CLOSE_ARRAY=($CLOSES)
             COUNT=${#CLOSE_ARRAY[@]}
             
