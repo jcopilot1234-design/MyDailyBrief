@@ -16,10 +16,8 @@ jobs:
       - name: Check Telegram for OK
         id: check
         run: |
-          # 攞 Telegram 更新
           RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
           
-          # 檢查有冇 "OK" 或 "ok" 回覆
           if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
             echo "approved=true" >> $GITHUB_OUTPUT
             echo "✅ 收到批准回覆"
@@ -34,16 +32,19 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           
-          # 攞今日日期
           TODAY=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
+          HOUR=$(TZ=Asia/Hong_Kong date +%H)
           
-          # 用 jq 更新 status
-          jq --arg date "$TODAY" '.us_approved = true | .us_approved_date = $date' ig-status.json > /tmp/ig-status.json
+          # 根據時間判斷係美股定港股 (08點前當美股，12點後當港股)
+          if [ "$HOUR" -lt "12" ]; then
+            jq --arg date "$TODAY" '.us_approved = true | .us_approved_date = $date' ig-status.json > /tmp/ig-status.json
+          else
+            jq --arg date "$TODAY" '.hk_approved = true | .hk_approved_date = $date' ig-status.json > /tmp/ig-status.json
+          fi
           mv /tmp/ig-status.json ig-status.json
           
-          # Commit
           git add ig-status.json
-          git commit -m "Approved US market for $TODAY" || echo "No changes"
+          git commit -m "Approved market for $TODAY" || echo "No changes"
           git push
           
           echo "✅ 已記錄批准狀態"
@@ -53,5 +54,5 @@ jobs:
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=✅ 已收到批准！將於 8:30AM 自動發佈到 Instagram。" \
+            --data-urlencode "text=✅ 已收到批准！將於指定時間自動發佈到 Instagram。" \
             --data-urlencode "disable_web_page_preview=true"
