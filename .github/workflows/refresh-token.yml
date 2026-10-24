@@ -1,0 +1,63 @@
+name: Auto Refresh Meta Tokens
+
+on:
+  schedule:
+    - cron: '0 0 1 * *'  # 每月 1 號 UTC 00:00（香港時間早上 8 點）自動執行
+  workflow_dispatch:      # 容許手動觸發
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Exchange for Long-Lived User Token
+        id: step1
+        run: |
+          # 這裡需要你原本的長期 User Token 或短期 Token
+          # 為了安全起見，我們用原本的 Page Token 來反推，或者用你設定的 User Token
+          RESPONSE=$(curl -s -G "https://graph.facebook.com/v22.0/oauth/access_token" \
+            --data-urlencode "grant_type=fb_exchange_token" \
+            --data-urlencode "client_id=${{ secrets.FB_APP_ID }}" \
+            --data-urlencode "client_secret=${{ secrets.FB_APP_SECRET }}" \
+            --data-urlencode "fb_exchange_token=${{ secrets.FB_USER_TOKEN }}")
+          
+          NEW_USER_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
+          
+          if [ "$NEW_USER_TOKEN" = "null" ] || [ -z "$NEW_USER_TOKEN" ]; then
+            echo "❌ 無法更新 User Token"
+            echo "$RESPONSE"
+            exit 1
+          fi
+          
+          echo "new_user_token=$NEW_USER_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Get New Page Token
+        id: step2
+        run: |
+          RESPONSE=$(curl -s -G "https://graph.facebook.com/v22.0/me/accounts" \
+            --data-urlencode "access_token=${{ steps.step1.outputs.new_user_token }}")
+          
+          NEW_PAGE_TOKEN=$(echo "$RESPONSE" | jq -r '.data[0].access_token')
+          
+          if [ "$NEW_PAGE_TOKEN" = "null" ] || [ -z "$NEW_PAGE_TOKEN" ]; then
+            echo "❌ 無法取得 Page Token"
+            echo "$RESPONSE"
+            exit 1
+          fi
+          
+          echo "new_page_token=$NEW_PAGE_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Update GitHub Secrets
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # 使用 GitHub CLI (gh) 更新 Secrets
+          gh secret set FB_USER_TOKEN -b "${{ steps.step1.outputs.new_user_token }}"
+          gh secret set IG_PAGE_ACCESS_TOKEN -b "${{ steps.step2.outputs.new_page_token }}"
+          echo "✅ 已經自動更新 GitHub Secrets！"
+
+      - name: Notify Telegram
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=🔄 系統通知：Meta Token 已經自動續期成功！未來 60 日將繼續正常運作。" \
+            --data-urlencode "disable_web_page_preview=true"
