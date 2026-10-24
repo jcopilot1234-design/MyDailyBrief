@@ -2,8 +2,8 @@ name: Instagram Publish
 
 on:
   schedule:
-    - cron: '30 0 * * 1-5'  # UTC 00:30 = HKT 08:30（美股）
-    - cron: '30 9 * * 1-5'  # UTC 09:30 = HKT 17:30（港股）
+    - cron: '30 0 * * 1-5'  # UTC 00:30 = HKT 08:30（美股發佈）
+    - cron: '30 9 * * 1-5'  # UTC 09:30 = HKT 17:30（港股發佈）
   workflow_dispatch:
 
 jobs:
@@ -19,27 +19,30 @@ jobs:
       - name: Check approval status
         id: check
         run: |
-          # 讀取 ig-status.json
           US_APPROVED=$(jq -r '.us_approved' ig-status.json)
           HK_APPROVED=$(jq -r '.hk_approved' ig-status.json)
           
-          echo "US approved: $US_APPROVED"
-          echo "HK approved: $HK_APPROVED"
-          
-          # 判斷而家係咪應該發
           HOUR=$(TZ=Asia/Hong_Kong date +%H)
           
-          if [ "$HOUR" = "08" ] && [ "$US_APPROVED" = "true" ]; then
+          # 手動觸發或時間到先執行
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "$US_APPROVED" = "true" ]; then
+              echo "publish=true" >> $GITHUB_OUTPUT
+              echo "market=us" >> $GITHUB_OUTPUT
+            elif [ "$HK_APPROVED" = "true" ]; then
+              echo "publish=true" >> $GITHUB_OUTPUT
+              echo "market=hk" >> $GITHUB_OUTPUT
+            else
+              echo "publish=false" >> $GITHUB_OUTPUT
+            fi
+          elif [ "$HOUR" = "08" ] && [ "$US_APPROVED" = "true" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "market=us" >> $GITHUB_OUTPUT
-            echo "✅ 美股已批准，開始發佈"
           elif [ "$HOUR" = "17" ] && [ "$HK_APPROVED" = "true" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "market=hk" >> $GITHUB_OUTPUT
-            echo "✅ 港股已批准，開始發佈"
           else
             echo "publish=false" >> $GITHUB_OUTPUT
-            echo "⏳ 未批准或唔係發佈時間"
           fi
 
       - name: Setup Node.js
@@ -55,44 +58,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y fonts-noto-cjk
 
-      - name: Fetch news data
-        if: steps.check.outputs.publish == 'true'
-        id: fetch
-        run: |
-          MARKET="${{ steps.check.outputs.market }}"
-          
-          if [ "$MARKET" = "us" ]; then
-            cat > /tmp/news.json << 'NEWS_EOF'
-          [
-            {
-              "title": "美股三大指數全線偏軟",
-              "highlight": "-0.92%",
-              "content": "道指跌 0.92%，標普 500 跌 0.94%，納指跌 1%。",
-              "source": "Reuters"
-            }
-          ]
-          NEWS_EOF
-          else
-            cat > /tmp/news.json << 'NEWS_EOF'
-          [
-            {
-              "title": "港股恒指收市表現",
-              "highlight": "+0.5%",
-              "content": "恒指收市升 0.5%，科技股帶動。",
-              "source": "SCMP"
-            }
-          ]
-          NEWS_EOF
-          fi
-          
-          echo "news_data<<EOF" >> $GITHUB_OUTPUT
-          cat /tmp/news.json >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
       - name: Generate IG images
         if: steps.check.outputs.publish == 'true'
         env:
-          NEWS_DATA: ${{ steps.fetch.outputs.news_data }}
+          NEWS_DATA: ${{ steps.check.outputs.market == 'us' && '[{"title":"美股三大指數全線偏軟","highlight":"-0.92%","content":"道指跌 0.92%，標普 500 跌 0.94%，納指跌 1%。","source":"Reuters"}]' || '[{"title":"港股恒指收市表現","highlight":"+0.5%","content":"恒指收市升 0.5%，科技股帶動。","source":"SCMP"}]' }}
           IG_LABEL: ${{ steps.check.outputs.market == 'us' && '美股日報' || '港股日報' }}
           IG_DATE: ${{ github.run_id }}
         run: |
@@ -129,7 +98,6 @@ jobs:
           IG_TOKEN: ${{ secrets.IG_PAGE_ACCESS_TOKEN }}
           IG_ACCOUNT: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
         run: |
-          # 建立 5 個媒體容器
           CONTAINERS=""
           for i in 1 2 3 4 5; do
             IMAGE_URL="https://jcopilot1234-design.github.io/MyDailyBrief/ig-images/card-${i}.png"
@@ -139,7 +107,6 @@ jobs:
               --data-urlencode "is_carousel_item=true" \
               --data-urlencode "access_token=${IG_TOKEN}")
             CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.id // "null"')
-            echo "容器 $i: $CONTAINER_ID"
             CONTAINERS="${CONTAINERS}${CONTAINER_ID},"
           done
           CONTAINERS=${CONTAINERS%,}
@@ -154,9 +121,6 @@ jobs:
             --data-urlencode "access_token=${IG_TOKEN}" \
             | jq -r '.id // "null"')
           
-          echo "Carousel 容器: $CAROUSEL_ID"
-          sleep 10
-          
           if [ "$CAROUSEL_ID" != "null" ]; then
             RESULT=$(curl -s -X POST \
               "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media_publish" \
@@ -169,7 +133,6 @@ jobs:
         if: steps.check.outputs.publish == 'true'
         run: |
           MARKET="${{ steps.check.outputs.market }}"
-          
           if [ "$MARKET" = "us" ]; then
             jq '.us_approved = false | .us_approved_date = null' ig-status.json > /tmp/ig-status.json
           else
@@ -178,7 +141,7 @@ jobs:
           mv /tmp/ig-status.json ig-status.json
           
           git add ig-status.json
-          git commit -m "Reset approval status for $MARKET" || echo "No changes"
+          git commit -m "Reset approval status" || echo "No changes"
           git push
 
       - name: Notify Telegram
