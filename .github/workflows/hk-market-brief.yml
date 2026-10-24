@@ -17,16 +17,22 @@ jobs:
           DATA=""
           IFS=',' read -ra SYM_ARRAY <<< "$SYMBOLS"
           for SYM in "${SYM_ARRAY[@]}"; do
-            RESULT=$(curl -s "https://query1.finance.yahoo.com/v8/finance/chart/${SYM}?interval=1d&range=2d" \
+            RESULT=$(curl -s "https://query1.finance.yahoo.com/v8/finance/chart/${SYM}?interval=1d&range=5d" \
               -H "User-Agent: Mozilla/5.0")
             
-            PRICE=$(echo "$RESULT" | jq -r '.chart.result[0].meta.regularMarketPrice // "N/A"')
-            PREV=$(echo "$RESULT" | jq -r '.chart.result[0].meta.chartPreviousClose // "N/A"')
+            CLOSES=$(echo "$RESULT" | jq -r '.chart.result[0].indicators.quote[0].close[] | select(. != null)')
+            CLOSE_ARRAY=($CLOSES)
+            COUNT=${#CLOSE_ARRAY[@]}
+            
             NAME=$(echo "$RESULT" | jq -r '.chart.result[0].meta.symbol // "N/A"')
             
-            if [ "$PRICE" != "N/A" ] && [ "$PREV" != "N/A" ]; then
-              CHANGE=$(awk "BEGIN {printf \"%.2f\", (($PRICE - $PREV) / $PREV) * 100}")
-              DATA="${DATA}${NAME}: ${PRICE} (${CHANGE}%)\n"
+            if [ "$COUNT" -ge 2 ]; then
+              CURRENT=${CLOSE_ARRAY[-1]}
+              PREVIOUS=${CLOSE_ARRAY[-2]}
+              CHANGE=$(awk "BEGIN {printf \"%.2f\", (($CURRENT - $PREVIOUS) / $PREVIOUS) * 100}")
+              DATA="${DATA}${NAME}: ${CURRENT} (${CHANGE}%)\n"
+            else
+              DATA="${DATA}${NAME}: N/A\n"
             fi
           done
           
