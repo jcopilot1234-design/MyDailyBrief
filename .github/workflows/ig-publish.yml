@@ -132,6 +132,9 @@ jobs:
       - name: Reset approval status
         if: steps.check.outputs.publish == 'true'
         run: |
+          # 切換返 main 分支
+          git checkout main
+          
           MARKET="${{ steps.check.outputs.market }}"
           if [ "$MARKET" = "us" ]; then
             jq '.us_approved = false | .us_approved_date = null' ig-status.json > /tmp/ig-status.json
@@ -142,7 +145,7 @@ jobs:
           
           git add ig-status.json
           git commit -m "Reset approval status" || echo "No changes"
-          git push
+          git push origin main
 
       - name: Notify Telegram
         if: steps.check.outputs.publish == 'true'
