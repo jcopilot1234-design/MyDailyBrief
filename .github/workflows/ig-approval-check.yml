@@ -32,10 +32,21 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           
+          # Debug：顯示當前目錄同檔案列表
+          echo "=== 當前目錄 ==="
+          pwd
+          echo "=== 檔案列表 ==="
+          ls -la
+          
+          # 如果真係搵唔到，自動建立一個
+          if [ ! -f "ig-status.json" ]; then
+            echo "❌ 搵唔到 ig-status.json，自動建立一個..."
+            echo '{"us_approved": false, "us_approved_date": null, "hk_approved": false, "hk_approved_date": null}' > ig-status.json
+          fi
+          
           TODAY=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
           HOUR=$(TZ=Asia/Hong_Kong date +%H)
           
-          # 根據時間判斷係美股定港股 (08點前當美股，12點後當港股)
           if [ "$HOUR" -lt "12" ]; then
             jq --arg date "$TODAY" '.us_approved = true | .us_approved_date = $date' ig-status.json > /tmp/ig-status.json
           else
