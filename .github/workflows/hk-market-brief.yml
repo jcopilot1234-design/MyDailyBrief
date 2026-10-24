@@ -1,18 +1,18 @@
-name: US Market Brief (8AM HKT)
+name: HK Market Brief (5PM HKT)
 
 on:
   schedule:
-    - cron: '0 0 * * 1-5'  # UTC 星期一至五 00:00 = 香港時間星期二至六 08:00
+    - cron: '0 9 * * 1-5'  # UTC 星期一至五 09:00 = 香港時間星期一至五 17:00
   workflow_dispatch:
 
 jobs:
-  send-us-brief:
+  send-hk-brief:
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch US market data
+      - name: Fetch HK market data
         id: fetch
         run: |
-          SYMBOLS="^DJI,^GSPC,^IXIC,AAPL,MSFT,NVDA,GOOGL,TSLA,META,GC=F,CL=F,HG=F,^VIX,^TNX,DXY,BTC-USD,ETH-USD"
+          SYMBOLS="^HSI,^HSCE,0700.HK,9988.HK,3690.HK,1810.HK,BABA,PDD,JD,000001.SS,399001.SZ,GC=F,CL=F,HG=F"
           
           DATA=""
           IFS=',' read -ra SYM_ARRAY <<< "$SYMBOLS"
@@ -44,7 +44,7 @@ jobs:
       - name: Fetch financial news with URLs
         id: news
         run: |
-          SOURCES="wsj.com|bloomberg.com|reuters.com|cnbc.com|morningstar.com|marketwatch.com"
+          SOURCES="etnet.com.hk|hkej.com|scmp.com|bloomberg.com|reuters.com|aastocks.com"
           
           NEWS=""
           IFS='|' read -ra SRC_ARRAY <<< "$SOURCES"
@@ -52,16 +52,19 @@ jobs:
             RSS=$(curl -s "https://news.google.com/rss/search?q=site:${SRC}+stock+market&hl=en-US&gl=US&ceid=US:en" \
               -H "User-Agent: Mozilla/5.0")
             
-            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -3)
+            ITEMS=$(echo "$RSS" | grep -oP '<item>.*?</item>' | head -10)
             while IFS= read -r ITEM; do
               TITLE=$(echo "$ITEM" | grep -oP '(?<=<title>)[^<]+' | sed 's/ - .*//')
               LINK=$(echo "$ITEM" | grep -oP '(?<=<link>)[^<]+')
               SOURCE_NAME=$(echo "$SRC" | cut -d'.' -f1 | tr '[:lower:]' '[:upper:]')
               
-              if [[ "$TITLE" =~ (Quote|Real-time|Streaming|Stock Code|printmgr|Download|Login|Sign Up|Subscribe) ]]; then
+              if [[ "$TITLE" =~ (Quote|Real-time|Streaming|Stock Code|printmgr|Download|Login|Sign Up|Subscribe|Home Page|Site Map|Cookie|Privacy) ]]; then
                 continue
               fi
               if [ ${#TITLE} -lt 20 ]; then
+                continue
+              fi
+              if [[ "$TITLE" =~ ^[0-9]+$ ]] || [[ "$TITLE" =~ ^[A-Z0-9]+$ ]]; then
                 continue
               fi
               
@@ -76,7 +79,7 @@ jobs:
       - name: Fetch AI news with URLs
         id: ainews
         run: |
-          RSS=$(curl -s "https://news.google.com/rss/search?q=artificial+intelligence+stock&hl=en-US&gl=US&ceid=US:en" \
+          RSS=$(curl -s "https://news.google.com/rss/search?q=artificial+intelligence+stock+hk&hl=en-US&gl=US&ceid=US:en" \
             -H "User-Agent: Mozilla/5.0")
           
           AINEWS=""
@@ -105,7 +108,7 @@ jobs:
         id: ai1
         run: |
           cat > /tmp/prompt1.txt << 'PROMPT_EOF'
-          以下係美股昨晚收市數據（香港時間今早）：
+          以下係香港市場今日收市數據（香港時間下午）：
 
           ${{ steps.fetch.outputs.data }}
 
@@ -167,14 +170,14 @@ jobs:
         id: ai3
         run: |
           cat > /tmp/prompt3.txt << 'PROMPT_EOF'
-          以下係美股昨晚收市數據（香港時間今早）：
+          以下係香港市場今日收市數據（香港時間下午）：
 
           ${{ steps.fetch.outputs.data }}
 
           請用繁體中文生成：
 
           今日市場評論：
-          用一段 100-150 字嘅評論，總結當天整體表現。
+          用一段 100-150 字嘅評論，總結今日香港市場整體表現。
 
           穩建長期投資建議：
           提供 2-3 點穩建長期投資建議。
@@ -201,7 +204,7 @@ jobs:
         run: |
           DATE=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
           cat > /tmp/msg1.txt << MSG_EOF
-          📈 美股收市摘要（${DATE} 早上）
+          📉 港股收市摘要（${DATE} 下午）
 
           【財經新聞】
           ${{ steps.ai1.outputs.summary }}
