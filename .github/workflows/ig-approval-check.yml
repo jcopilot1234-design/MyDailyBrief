@@ -32,18 +32,6 @@ jobs:
           git config user.name "github-actions"
           git config user.email "actions@github.com"
           
-          # Debug：顯示當前目錄同檔案列表
-          echo "=== 當前目錄 ==="
-          pwd
-          echo "=== 檔案列表 ==="
-          ls -la
-          
-          # 如果真係搵唔到，自動建立一個
-          if [ ! -f "ig-status.json" ]; then
-            echo "❌ 搵唔到 ig-status.json，自動建立一個..."
-            echo '{"us_approved": false, "us_approved_date": null, "hk_approved": false, "hk_approved_date": null}' > ig-status.json
-          fi
-          
           TODAY=$(TZ=Asia/Hong_Kong date +%Y-%m-%d)
           HOUR=$(TZ=Asia/Hong_Kong date +%H)
           
@@ -60,10 +48,20 @@ jobs:
           
           echo "✅ 已記錄批准狀態"
 
+      - name: Trigger Instagram Publish
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          curl -X POST \
+            -H "Authorization: token ${{ secrets.GH_PAT }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/jcopilot1234-design/MyDailyBrief/actions/workflows/ig-publish.yml/dispatches" \
+            -d '{"ref":"main"}'
+          echo "✅ 已觸發 Instagram Publish"
+
       - name: Notify Telegram
         if: steps.check.outputs.approved == 'true'
         run: |
           curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
-            --data-urlencode "text=✅ 已收到批准！將於指定時間自動發佈到 Instagram。" \
+            --data-urlencode "text=✅ 已收到批准！正在立即處理並發佈到 Instagram..." \
             --data-urlencode "disable_web_page_preview=true"
