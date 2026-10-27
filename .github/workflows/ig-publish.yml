@@ -68,6 +68,7 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           MARKET="${{ steps.check.outputs.market }}"
+          
           if [ "$MARKET" = "us" ]; then
             PROMPT="請根據今日美股市場狀況，生成 5 則重要財經新聞摘要。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式必須完全如下：[{\"title\":\"標題\",\"highlight\":\"重點數字\",\"content\":\"100字內內容\",\"source\":\"來源\"}]"
           else
@@ -86,8 +87,11 @@ jobs:
             
           SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
           
+          # 清理機制：只提取 [ 到 ] 之間嘅內容，刪除所有 Markdown 或廢話
+          CLEAN_JSON=$(echo "$SUMMARY" | sed -n '/\[/,/\]/p')
+          
           echo "news_json<<EOF" >> $GITHUB_OUTPUT
-          echo "$SUMMARY" >> $GITHUB_OUTPUT
+          echo "$CLEAN_JSON" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Generate IG images
