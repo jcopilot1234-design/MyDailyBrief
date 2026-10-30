@@ -1,7 +1,7 @@
 name: Auto Refresh Meta Token
 
 on:
-  workflow_dispatch: # 手動觸發，換完之後我哋再加定時
+  workflow_dispatch: # 手動觸發，測試成功後可以加 schedule
 
 jobs:
   refresh:
@@ -30,11 +30,14 @@ jobs:
       - name: Get New Long-Lived Page Token
         id: step2
         run: |
-          # 用長期 User Token 換長期 Page Token
-          RESPONSE=$(curl -s -G "https://graph.facebook.com/v22.0/me/accounts" \
+          # 直接指定 Thedailynewsbrief 嘅 Page ID 去攞 Token
+          PAGE_ID="1425303797332022"
+          
+          RESPONSE=$(curl -s -G "https://graph.facebook.com/v22.0/${PAGE_ID}" \
+            --data-urlencode "fields=access_token" \
             --data-urlencode "access_token=${{ steps.step1.outputs.new_user_token }}")
           
-          NEW_PAGE_TOKEN=$(echo "$RESPONSE" | jq -r '.data[0].access_token')
+          NEW_PAGE_TOKEN=$(echo "$RESPONSE" | jq -r '.access_token')
           
           if [ "$NEW_PAGE_TOKEN" = "null" ] || [ -z "$NEW_PAGE_TOKEN" ]; then
             echo "❌ 無法取得 Page Token，API 回應："
