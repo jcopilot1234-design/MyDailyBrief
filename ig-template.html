@@ -25,41 +25,40 @@
   }
   .container {
     position: relative; z-index: 10;
-    padding: 70px 60px; height: 100%;
+    padding: 60px 50px; height: 100%;
     display: flex; flex-direction: column;
   }
   .top-row {
-    display: flex; justify-content: space-between; align-items: center; margin-bottom: 50px;
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 40px;
   }
   .label {
-    padding: 12px 28px; background: rgba(255, 200, 80, 0.15); border: 2px solid rgba(255, 200, 80, 0.6); border-radius: 30px;
-    font-size: 24px; font-weight: 600; color: #ffc850; letter-spacing: 2px;
+    padding: 10px 24px; background: rgba(255, 200, 80, 0.15); border: 2px solid rgba(255, 200, 80, 0.6); border-radius: 30px;
+    font-size: 30px; font-weight: 600; color: #ffc850; letter-spacing: 2px;
   }
-  .brand { font-size: 26px; font-weight: 700; text-align: right; }
-  .brand-sub { font-size: 18px; color: #8899bb; margin-top: 4px; letter-spacing: 3px; }
+  .brand { font-size: 34px; font-weight: 700; text-align: right; }
+  .brand-sub { font-size: 22px; color: #8899bb; margin-top: 4px; letter-spacing: 3px; }
   
-  .main-title { font-size: 60px; font-weight: 900; color: #ffffff; margin-bottom: 40px; line-height: 1.2; }
+  .main-title { font-size: 76px; font-weight: 900; color: #ffffff; margin-bottom: 40px; line-height: 1.1; }
   
   .news-list {
-    display: flex; flex-direction: column; gap: 30px; flex-grow: 1;
+    display: flex; flex-direction: column; gap: 25px; flex-grow: 1;
   }
   .news-item {
     display: flex; align-items: flex-start; gap: 20px;
-    background: rgba(255, 255, 255, 0.05); padding: 25px; border-radius: 15px; border-left: 5px solid #ffc850;
+    background: rgba(255, 255, 255, 0.05); padding: 25px 25px; border-radius: 15px; border-left: 8px solid #ffc850;
   }
   .number {
-    font-size: 40px; font-weight: 900; color: #ffc850; line-height: 1;
+    font-size: 64px; font-weight: 900; color: #ffc850; line-height: 1;
   }
-  .text {
-    font-size: 32px; line-height: 1.5; color: #e0e8f5; font-weight: 500;
+  .headline {
+    /* 字體加大兩級，並設定合適的行距 */
+    font-size: 56px; font-weight: 700; color: #ffffff; line-height: 1.3;
   }
   
   .footer {
     display: flex; justify-content: space-between; align-items: center;
-    padding-top: 30px; border-top: 1px solid rgba(100, 150, 255, 0.2); font-size: 20px; color: #8899bb;
+    padding-top: 20px; border-top: 1px solid rgba(100, 150, 255, 0.2); font-size: 26px; color: #8899bb;
   }
-  .source { display: flex; align-items: center; gap: 10px; }
-  .source-icon { width: 24px; height: 24px; border-radius: 50%; border: 2px solid #ffc850; }
 </style>
 </head>
 <body>
@@ -78,19 +77,16 @@
     <div class="main-title">今日市場焦點速覽</div>
     
     <div class="news-list">
-      <div class="news-item"><div class="number">1</div><div class="text">{{POINT_1}}</div></div>
-      <div class="news-item"><div class="number">2</div><div class="text">{{POINT_2}}</div></div>
-      <div class="news-item"><div class="number">3</div><div class="text">{{POINT_3}}</div></div>
-      <div class="news-item"><div class="number">4</div><div class="text">{{POINT_4}}</div></div>
-      <div class="news-item"><div class="number">5</div><div class="text">{{POINT_5}}</div></div>
+      <div class="news-item"><div class="number">1</div><div class="headline">{{POINT_1}}</div></div>
+      <div class="news-item"><div class="number">2</div><div class="headline">{{POINT_2}}</div></div>
+      <div class="news-item"><div class="number">3</div><div class="headline">{{POINT_3}}</div></div>
+      <div class="news-item"><div class="number">4</div><div class="headline">{{POINT_4}}</div></div>
+      <div class="news-item"><div class="number">5</div><div class="headline">{{POINT_5}}</div></div>
     </div>
     
     <div class="footer">
-      <div class="source">
-        <div class="source-icon"></div>
-        <span>來源：各大財經媒體</span>
-      </div>
-      <div class="date">{{DATE}}</div>
+      <div>來源：各大財經媒體</div>
+      <div>{{DATE}}</div>
     </div>
   </div>
 </body>
