@@ -25,9 +25,9 @@ async function generateImages() {
   
   let html = template.replace('{{LABEL}}', label).replace('{{DATE}}', date);
   
-  // 將 AI 生成嘅 point 填入 {{POINT_1}} 至 {{POINT_5}}
   for (let i = 1; i <= 5; i++) {
     const item = newsData[i - 1] || {};
+    // 將 Point 填入 HTML
     html = html.replace(`{{POINT_${i}}}`, item.point || '暫無數據');
   }
   
