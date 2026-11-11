@@ -63,7 +63,6 @@ jobs:
         run: |
           MARKET="${{ steps.check.outputs.market }}"
           if [ "$MARKET" = "us" ]; then
-            # 要求 Point 約 40 字，Detail 約 100 字
             PROMPT="請根據今日美股市場狀況，生成 5 則重要財經新聞。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"point\":\"重點標題（約40字）\",\"detail\":\"詳細解釋（約100字）\"}]"
           else
             PROMPT="請根據今日港股市場狀況，生成 5 則重要財經新聞。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"point\":\"重點標題（約40字）\",\"detail\":\"詳細解釋（約100字）\"}]"
