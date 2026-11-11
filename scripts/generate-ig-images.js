@@ -25,10 +25,10 @@ async function generateImages() {
   
   let html = template.replace('{{LABEL}}', label).replace('{{DATE}}', date);
   
-  // 只填入 Headline
+  // 將 AI 生成嘅 point 填入 {{POINT_1}} 至 {{POINT_5}}
   for (let i = 1; i <= 5; i++) {
     const item = newsData[i - 1] || {};
-    html = html.replace(`{{HEADLINE_${i}}}`, item.headline || '暫無數據');
+    html = html.replace(`{{POINT_${i}}}`, item.point || '暫無數據');
   }
   
   try {
