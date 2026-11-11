@@ -27,7 +27,6 @@ async function generateImages() {
   
   for (let i = 1; i <= 5; i++) {
     const item = newsData[i - 1] || {};
-    // 將 Point 填入 HTML
     html = html.replace(`{{POINT_${i}}}`, item.point || '暫無數據');
   }
   
