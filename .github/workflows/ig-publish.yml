@@ -63,9 +63,9 @@ jobs:
         run: |
           MARKET="${{ steps.check.outputs.market }}"
           if [ "$MARKET" = "us" ]; then
-            PROMPT="請根據今日美股市場狀況，生成 5 則重要財經新聞。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"headline\":\"重點標題（50字內）\",\"detail\":\"詳細解釋（100字內）\"}]"
+            PROMPT="請根據今日美股市場狀況，生成 5 則重要財經新聞。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"point\":\"重點標題(50字內)\",\"detail\":\"詳細解釋(100字內)\"}]"
           else
-            PROMPT="請根據今日港股市場狀況，生成 5 則重要財經新聞。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"headline\":\"重點標題（50字內）\",\"detail\":\"詳細解釋（100字內）\"}]"
+            PROMPT="請根據今日港股市場狀況，生成 5 則重要財經新聞。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"point\":\"重點標題(50字內)\",\"detail\":\"詳細解釋(100字內)\"}]"
           fi
           
           PAYLOAD=$(jq -n \
@@ -137,10 +137,11 @@ jobs:
             
           echo "容器 ID: $CONTAINER_ID"
           
-          # 用 jq 將新聞詳細解釋同 Hashtag 組合成 Caption
-          CAPTION=$(echo "$NEWS_JSON" | jq -r 'map("📌 " + .headline + "\n" + .detail) | join("\n\n")')
+          # 將 point 同 detail 抽出嚟放落 Caption
+          POINTS=$(echo "$NEWS_JSON" | jq -r 'map("📌 " + .point + "\n" + .detail) | join("\n\n")')
           
-          FULL_CAPTION=$(printf "%s\n\n👉 想開始投資美股/港股？點擊主頁連結或使用以下專屬連結開戶，賺取豐富迎新獎賞！\n🔗 TBC (To Be Confirmed)\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資 #被動收入 #投資理財 #股票投資 #恒生指數 #道瓊斯 #納斯達克 #科技股 #新能源車 #財經分析 #理財規劃 #新手投資 #香港股市 #美股分析 #投資策略 #財富自由\n\n⚠️ 免責聲明：本內容由 AI 自動生成，僅供參考，不構成任何投資建議。投資涉及風險，請自行評估。" "$CAPTION")
+          # TBC 測試連結 + 20 個 Hashtags
+          FULL_CAPTION=$(printf "%s\n\n👉 想開始投資美股/港股？點擊主頁連結或使用以下專屬連結開戶，賺取豐富迎新獎賞！\n🔗 TBC (To Be Confirmed)\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資 #被動收入 #投資理財 #股票投資 #恒生指數 #道瓊斯 #納斯達克 #科技股 #新能源車 #財經分析 #理財規劃 #新手投資 #香港股市 #美股分析 #投資策略 #財富自由\n\n⚠️ 免責聲明：本內容由 AI 自動生成，僅供參考，不構成任何投資建議。投資涉及風險，請自行評估。" "$POINTS")
           
           if [ "$CONTAINER_ID" != "null" ]; then
             echo "等待 15 秒讓 Meta 處理圖片..."
