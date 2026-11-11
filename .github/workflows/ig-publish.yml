@@ -24,28 +24,22 @@ jobs:
           US_APPROVED=$(jq -r '.us_approved' ig-status.json)
           HK_APPROVED=$(jq -r '.hk_approved' ig-status.json)
           
-          # 如果手動指定咗市場，就強制執行
           INPUT_MARKET="${{ github.event.inputs.market }}"
           
           if [ "$INPUT_MARKET" = "us" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "market=us" >> $GITHUB_OUTPUT
-            echo "✅ 準備發佈美股（手動指定）"
           elif [ "$INPUT_MARKET" = "hk" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "market=hk" >> $GITHUB_OUTPUT
-            echo "✅ 準備發佈港股（手動指定）"
           elif [ "$US_APPROVED" = "true" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "market=us" >> $GITHUB_OUTPUT
-            echo "✅ 準備發佈美股（狀態已批准）"
           elif [ "$HK_APPROVED" = "true" ]; then
             echo "publish=true" >> $GITHUB_OUTPUT
             echo "market=hk" >> $GITHUB_OUTPUT
-            echo "✅ 準備發佈港股（狀態已批准）"
           else
             echo "publish=false" >> $GITHUB_OUTPUT
-            echo "⏳ 未批准，或者市場狀態唔啱"
           fi
 
       - name: Setup Node.js
@@ -68,11 +62,10 @@ jobs:
           DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         run: |
           MARKET="${{ steps.check.outputs.market }}"
-          
           if [ "$MARKET" = "us" ]; then
-            PROMPT="請根據今日美股市場狀況，生成 5 則重要財經新聞摘要。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式必須完全如下：[{\"title\":\"標題\",\"highlight\":\"重點數字\",\"content\":\"100字內內容\",\"source\":\"來源\"}]"
+            PROMPT="請根據今日美股市場狀況，生成 5 個極度精簡的財經新聞要點（每點不超過 40 字，直接講重點數字和原因，例如：恒生指數跌300點，1.8%，市場憂慮地緣政治風險）。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"point\":\"要點內容\"}]"
           else
-            PROMPT="請根據今日港股市場狀況，生成 5 則重要財經新聞摘要。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式必須完全如下：[{\"title\":\"標題\",\"highlight\":\"重點數字\",\"content\":\"100字內內容\",\"source\":\"來源\"}]"
+            PROMPT="請根據今日港股市場狀況，生成 5 個極度精簡的財經新聞要點（每點不超過 40 字，直接講重點數字和原因，例如：恒生指數跌300點，1.8%，市場憂慮地緣政治風險）。必須以嚴格的 JSON 陣列格式輸出，不要包含任何 markdown code block 標記。格式：[{\"point\":\"要點內容\"}]"
           fi
           
           PAYLOAD=$(jq -n \
@@ -86,8 +79,6 @@ jobs:
             -d "$PAYLOAD")
             
           SUMMARY=$(echo "$RESPONSE" | jq -r '.choices[0].message.content')
-          
-          # 清理機制：只提取 [ 到 ] 之間嘅內容，刪除所有 Markdown 或廢話
           CLEAN_JSON=$(echo "$SUMMARY" | sed -n '/\[/,/\]/p')
           
           echo "news_json<<EOF" >> $GITHUB_OUTPUT
@@ -111,73 +102,53 @@ jobs:
           git config user.email "actions@github.com"
           
           mkdir -p /tmp/ig-images
-          cp ig-output/*.png /tmp/ig-images/
+          cp ig-output/summary.png /tmp/ig-images/
           
           git stash --include-untracked
           git fetch origin gh-pages
           git checkout gh-pages
           
           mkdir -p ig-images
-          cp /tmp/ig-images/*.png ig-images/
+          cp /tmp/ig-images/summary.png ig-images/
           
           git add ig-images/
-          git commit -m "Add IG images $(date +%Y-%m-%d)" || echo "No changes"
+          git commit -m "Add IG image $(date +%Y-%m-%d)" || echo "No changes"
           git push origin gh-pages
 
       - name: Wait for GitHub Pages
         if: steps.check.outputs.publish == 'true'
         run: sleep 60
 
-      - name: Publish to Instagram Carousel
+      - name: Publish to Instagram
         if: steps.check.outputs.publish == 'true'
         env:
           IG_TOKEN: ${{ secrets.IG_PAGE_ACCESS_TOKEN }}
           IG_ACCOUNT: ${{ secrets.IG_BUSINESS_ACCOUNT_ID }}
         run: |
-          CONTAINERS=""
-          for i in 1 2 3 4 5; do
-            IMAGE_URL="https://jcopilot1234-design.github.io/MyDailyBrief/ig-images/card-${i}.png"
-            echo "檢查圖片 $i: $IMAGE_URL"
-            
-            RESPONSE=$(curl -s -X POST \
-              "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media" \
-              --data-urlencode "image_url=${IMAGE_URL}" \
-              --data-urlencode "is_carousel_item=true" \
-              --data-urlencode "access_token=${IG_TOKEN}")
-            
-            echo "API 回應: $RESPONSE"
-            
-            CONTAINER_ID=$(echo "$RESPONSE" | jq -r '.id // "null"')
-            CONTAINERS="${CONTAINERS}${CONTAINER_ID},"
-            
-            sleep 10
-          done
-          CONTAINERS=${CONTAINERS%,}
+          IMAGE_URL="https://jcopilot1234-design.github.io/MyDailyBrief/ig-images/summary.png"
+          echo "檢查圖片: $IMAGE_URL"
           
-          CAPTION=$(printf "今日財經重點 📊\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資")
-          
-          CAROUSEL_RESPONSE=$(curl -s -X POST \
+          CONTAINER_ID=$(curl -s -X POST \
             "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media" \
-            --data-urlencode "media_type=CAROUSEL" \
-            --data-urlencode "children=${CONTAINERS}" \
-            --data-urlencode "caption=${CAPTION}" \
-            --data-urlencode "access_token=${IG_TOKEN}")
+            --data-urlencode "image_url=${IMAGE_URL}" \
+            --data-urlencode "access_token=${IG_TOKEN}" \
+            | jq -r '.id // "null"')
             
-          echo "Carousel API 回應: $CAROUSEL_RESPONSE"
+          echo "容器 ID: $CONTAINER_ID"
           
-          CAROUSEL_ID=$(echo "$CAROUSEL_RESPONSE" | jq -r '.id // "null"')
+          CAPTION=$(printf "今日財經重點 📊\n\n👉 想開始投資美股/港股？點擊主頁連結或使用以下專屬連結開戶，賺取豐富迎新獎賞！\n🔗 https://你的專屬Webull連結\n\n#美股 #港股 #財經新聞 #AI新聞快訊 #長期投資 #被動收入\n\n⚠️ 免責聲明：本內容由 AI 自動生成，僅供參考，不構成任何投資建議。投資涉及風險，請自行評估。")
           
-          echo "等待 30 秒讓 Meta 處理 Carousel..."
-          sleep 30
-          
-          if [ "$CAROUSEL_ID" != "null" ]; then
+          if [ "$CONTAINER_ID" != "null" ]; then
+            echo "等待 15 秒讓 Meta 處理圖片..."
+            sleep 15
+            
             PUBLISH_RESPONSE=$(curl -s -X POST \
               "https://graph.facebook.com/v22.0/${IG_ACCOUNT}/media_publish" \
-              --data-urlencode "creation_id=${CAROUSEL_ID}" \
+              --data-urlencode "creation_id=${CONTAINER_ID}" \
               --data-urlencode "access_token=${IG_TOKEN}")
             echo "發佈結果: $PUBLISH_RESPONSE"
           else
-            echo "❌ Carousel 容器建立失敗，跳過發佈"
+            echo "❌ 容器建立失敗，跳過發佈"
           fi
 
       - name: Reset approval status
