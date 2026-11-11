@@ -23,19 +23,18 @@ async function generateImages() {
   const page = await browser.newPage();
   await page.setViewport({ width: 1080, height: 1350 });
   
-  // 替換模板中的 5 個 Point
   let html = template.replace('{{LABEL}}', label).replace('{{DATE}}', date);
   
+  // 只填入 Headline
   for (let i = 1; i <= 5; i++) {
-    const pointText = newsData[i - 1] ? newsData[i - 1].point : '暫無數據';
-    html = html.replace(`{{POINT_${i}}}`, pointText);
+    const item = newsData[i - 1] || {};
+    html = html.replace(`{{HEADLINE_${i}}}`, item.headline || '暫無數據');
   }
   
   try {
     await page.setContent(html, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await new Promise(resolve => setTimeout(resolve, 500));
     
-    // 只生成一張圖
     await page.screenshot({ path: path.join(outputDir, 'summary.png'), type: 'png' });
     console.log(`✅ 生成 summary.png 成功`);
   } catch (err) {
