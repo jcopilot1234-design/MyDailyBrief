@@ -16,7 +16,8 @@ jobs:
       - name: Check Telegram for OK
         id: check
         run: |
-          RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
+          # 加了 ?offset=-1 確保每次讀取最新訊息，不會被標記為已讀
+          RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates?offset=-1")
           
           if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
             echo "approved=true" >> $GITHUB_OUTPUT
@@ -53,9 +54,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          # 自動觸發 Instagram Publish Workflow
+          # 使用 GH_PAT 自動觸發 ig-publish.yml
           gh workflow run ig-publish.yml --ref main
-          echo "✅ 已觸發 Instagram Publish"
+          echo "✅ 已成功觸發 Instagram Publish"
 
       - name: Notify Telegram
         if: steps.check.outputs.approved == 'true'
