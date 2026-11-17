@@ -17,10 +17,13 @@ jobs:
         id: check
         run: |
           RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
+          
           if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
             echo "approved=true" >> $GITHUB_OUTPUT
+            echo "✅ 收到批准回覆"
           else
             echo "approved=false" >> $GITHUB_OUTPUT
+            echo "⏳ 未收到批准回覆"
           fi
 
       - name: Update ig-status.json
@@ -42,3 +45,22 @@ jobs:
           git add ig-status.json
           git commit -m "Approved market for $TODAY" || echo "No changes"
           git push
+          
+          echo "✅ 已記錄批准狀態"
+
+      - name: Trigger Instagram Publish
+        if: steps.check.outputs.approved == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          # 自動觸發 Instagram Publish Workflow
+          gh workflow run ig-publish.yml --ref main
+          echo "✅ 已觸發 Instagram Publish"
+
+      - name: Notify Telegram
+        if: steps.check.outputs.approved == 'true'
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
+            --data-urlencode "text=✅ 已收到批准！正在自動處理並發佈到 Instagram..." \
+            --data-urlencode "disable_web_page_preview=true"
