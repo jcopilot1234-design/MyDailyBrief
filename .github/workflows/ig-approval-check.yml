@@ -16,8 +16,11 @@ jobs:
       - name: Check Telegram for OK
         id: check
         run: |
-          # 加了 ?offset=-1 確保每次讀取最新訊息，不會被標記為已讀
-          RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates?offset=-1")
+          # 移除 offset=-1，正常讀取所有未讀訊息
+          RESPONSE=$(curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates")
+          
+          # 提取最新嘅 update_id（用嚟稍後清除已讀）
+          UPDATE_ID=$(echo "$RESPONSE" | jq -r '.result[-1].update_id // "null"')
           
           if echo "$RESPONSE" | grep -qi '"text":"ok"'; then
             echo "approved=true" >> $GITHUB_OUTPUT
@@ -26,6 +29,9 @@ jobs:
             echo "approved=false" >> $GITHUB_OUTPUT
             echo "⏳ 未收到批准回覆"
           fi
+          
+          # 記錄 update_id 俾下一步用
+          echo "update_id=$UPDATE_ID" >> $GITHUB_OUTPUT
 
       - name: Update ig-status.json
         if: steps.check.outputs.approved == 'true'
@@ -54,9 +60,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          # 使用 GH_PAT 自動觸發 ig-publish.yml
+          # 自動觸發 Instagram Publish Workflow
           gh workflow run ig-publish.yml --ref main
-          echo "✅ 已成功觸發 Instagram Publish"
+          echo "✅ 已觸發 Instagram Publish"
 
       - name: Notify Telegram
         if: steps.check.outputs.approved == 'true'
@@ -65,3 +71,11 @@ jobs:
             --data-urlencode "chat_id=${{ secrets.TELEGRAM_CHAT_ID }}" \
             --data-urlencode "text=✅ 已收到批准！正在自動處理並發佈到 Instagram..." \
             --data-urlencode "disable_web_page_preview=true"
+
+      - name: Clear Telegram Updates (Mark as Read)
+        if: steps.check.outputs.update_id != 'null'
+        run: |
+          # 🌟 終極防炸機制：將訊息標記為已讀，下次唔會再讀到
+          NEXT_OFFSET=$(( ${{ steps.check.outputs.update_id }} + 1 ))
+          curl -s "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/getUpdates?offset=${NEXT_OFFSET}" > /dev/null
+          echo "✅ 已清除已讀訊息 (Offset: ${NEXT_OFFSET})"
